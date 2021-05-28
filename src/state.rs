@@ -39,6 +39,7 @@ pub struct State {
     light_bind_group: wgpu::BindGroup,
     right_speed: f32,
     forward_speed: f32,
+    up_speed: f32,
     camera: Camera,
     uniforms: Uniforms,
     projection: Projection,
@@ -428,6 +429,7 @@ impl State {
 
             right_speed: 0.0,
             forward_speed: 0.0,
+            up_speed: 0.0,
         }
     }
 
@@ -462,6 +464,8 @@ impl State {
             VirtualKeyCode::S => self.forward_speed -= amount,
             VirtualKeyCode::A => self.right_speed -= amount,
             VirtualKeyCode::D => self.right_speed += amount,
+            VirtualKeyCode::LControl => self.up_speed -= amount,
+            VirtualKeyCode::Space => self.up_speed += amount,
             _ => (),
         }
     }
@@ -470,6 +474,12 @@ impl State {
         if self.mouse_grabbed {
             self.camera.yaw += cgmath::Rad(dx as f32 * 0.005);
             self.camera.pitch -= cgmath::Rad(dy as f32 * 0.005);
+
+            if self.camera.pitch < cgmath::Rad::from(cgmath::Deg(-80.0)) {
+                self.camera.pitch = cgmath::Rad::from(cgmath::Deg(-80.0));
+            } else if self.camera.pitch > cgmath::Rad::from(cgmath::Deg(89.0)) {
+                self.camera.pitch = cgmath::Rad::from(cgmath::Deg(89.0));
+            }
         }
     }
 
@@ -490,10 +500,15 @@ impl State {
 
         // Move forward/backward and left/right
         let (yaw_sin, yaw_cos) = self.camera.yaw.0.sin_cos();
+
         let forward = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        let right = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
         self.camera.position += forward * self.forward_speed * 6.0 * dt_secs;
+
+        let right = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
         self.camera.position += right * self.right_speed * 6.0 * dt_secs;
+
+        let up = cgmath::Vector3::new(0.0, 1.0, 0.0).normalize();
+        self.camera.position += up * self.up_speed * 6.0 * dt_secs;
 
         self.uniforms
             .update_view_projection(&self.camera, &self.projection);

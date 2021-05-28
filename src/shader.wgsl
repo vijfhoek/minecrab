@@ -59,14 +59,15 @@ fn main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
 }
 
 [[group(0), binding(0)]]
-var t_diffuse: texture_2d<f32>;
+var texture_diffuse: texture_2d<f32>;
 [[group(0), binding(1)]]
-var s_diffuse: sampler;
+var sampler_diffuse: sampler;
 
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    let object_color: vec4<f32> = textureSample(t_diffuse, s_diffuse, in.texture_coordinates);
+    let object_color: vec4<f32> =
+        textureSample(texture_diffuse, sampler_diffuse, in.texture_coordinates);
 
     let ambient_strength = 0.2;
     let ambient_color = light.color * ambient_strength;

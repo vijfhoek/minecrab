@@ -1,3 +1,5 @@
+use cgmath::SquareMatrix;
+
 use crate::camera::Camera;
 
 #[repr(C)]
@@ -10,7 +12,6 @@ pub struct Uniforms {
 
 impl Uniforms {
     pub fn new() -> Self {
-        use cgmath::SquareMatrix;
         Self {
             view_projection: cgmath::Matrix4::identity().into(),
         }

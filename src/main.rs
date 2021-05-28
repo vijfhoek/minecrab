@@ -2,11 +2,10 @@ mod camera;
 mod texture;
 mod uniforms;
 
-use image::GenericImageView;
-use std::{iter, mem::size_of, num::NonZeroU32, time::Instant};
+use std::{iter, mem::size_of, time::Instant};
 use wgpu::{util::DeviceExt, BufferAddress};
 use winit::{
-    event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
@@ -110,9 +109,6 @@ struct State {
     index_buffer: wgpu::Buffer,
     num_indices: u32,
     dirt_diffuse_bind_group: wgpu::BindGroup,
-    camera: Camera,
-    uniforms: Uniforms,
-    uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
 }
 
@@ -325,9 +321,6 @@ impl State {
             vertex_buffer,
             index_buffer,
             num_indices,
-            camera,
-            uniforms,
-            uniform_buffer,
             uniform_bind_group,
             dirt_diffuse_bind_group,
         }
@@ -410,14 +403,6 @@ fn main() {
                 if !state.input(event) {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::KeyboardInput { input, .. } => match input {
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            } => *control_flow = ControlFlow::Exit,
-                            _ => {}
-                        },
                         WindowEvent::Resized(physical_size) => {
                             state.resize(*physical_size);
                         }

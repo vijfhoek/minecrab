@@ -10,7 +10,7 @@ mod vertex;
 use std::time::Instant;
 use winit::{
     dpi::{PhysicalSize, Size},
-    event::{Event, WindowEvent},
+    event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
@@ -37,26 +37,48 @@ fn main() {
     let mut frames = 0;
     let mut instant = Instant::now();
 
+    let mut last_render_time = Instant::now();
+
     event_loop.run(move |event, _, control_flow| {
         match event {
+            Event::DeviceEvent { ref event, .. } => state.input(event),
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == window.id() => {
-                if !state.input(event) {
-                    match event {
-                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::Resized(physical_size) => {
-                            state.resize(*physical_size);
-                        }
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            // new_inner_size is &mut so w have to dereference it twice
-                            state.resize(**new_inner_size);
-                        }
-                        _ => {}
+            } if window_id == window.id() => match event {
+                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                WindowEvent::KeyboardInput {
+                    input:
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        },
+                    ..
+                } => {
+                    let _ = window.set_cursor_grab(false);
+                    window.set_cursor_visible(true);
+                    state.mouse_grabbed = false;
+                }
+                WindowEvent::Resized(physical_size) => {
+                    state.resize(*physical_size);
+                }
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    state.resize(**new_inner_size);
+                }
+                WindowEvent::MouseInput {
+                    state: mouse_state,
+                    button,
+                    ..
+                } => {
+                    if *button == MouseButton::Left && *mouse_state == ElementState::Pressed {
+                        let _ = window.set_cursor_grab(true);
+                        window.set_cursor_visible(false);
+                        state.mouse_grabbed = true;
                     }
                 }
-            }
+                _ => {}
+            },
             Event::RedrawRequested(_) => {
                 frames += 1;
                 if frames % 1000 == 0 {
@@ -66,7 +88,11 @@ fn main() {
                     instant = Instant::now();
                 }
 
-                state.update();
+                let now = Instant::now();
+                let dt = now - last_render_time;
+                last_render_time = now;
+                state.update(dt);
+
                 match state.render() {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost

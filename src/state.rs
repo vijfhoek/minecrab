@@ -1,9 +1,14 @@
-use cgmath::Rotation3;
+use std::time::Duration;
+
+use cgmath::{InnerSpace, Rotation3};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use winit::{event::WindowEvent, window::Window};
+use winit::{
+    event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
+    window::Window,
+};
 
 use crate::{
-    camera::Camera,
+    camera::{Camera, Projection},
     cube,
     instance::{Instance, InstanceRaw},
     light::Light,
@@ -29,9 +34,16 @@ pub struct State {
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     depth_texture: Texture,
-    light: Light,
-    light_buffer: wgpu::Buffer,
+    _light: Light,
+    _light_buffer: wgpu::Buffer,
     light_bind_group: wgpu::BindGroup,
+    right_speed: f32,
+    forward_speed: f32,
+    camera: Camera,
+    uniforms: Uniforms,
+    projection: Projection,
+    uniform_buffer: wgpu::Buffer,
+    pub mouse_grabbed: bool,
 }
 
 impl State {
@@ -205,24 +217,36 @@ impl State {
         (texture_bind_group_layout, texture_bind_group)
     }
 
-    fn create_camera(swap_chain_descriptor: &wgpu::SwapChainDescriptor) -> Camera {
-        Camera {
-            eye: (0.0, 5.0, 10.0).into(), // position the camera one unit up and 2 units back
-            target: (0.0, 0.0, 0.0).into(), // have it look at the origin
-            up: cgmath::Vector3::unit_y(),
-            aspect: swap_chain_descriptor.width as f32 / swap_chain_descriptor.height as f32,
-            fovy: 45.0,
-            znear: 0.1,
-            zfar: 100.0,
-        }
+    fn create_camera(swap_chain_descriptor: &wgpu::SwapChainDescriptor) -> (Camera, Projection) {
+        let camera = Camera::new(
+            (0.0, 5.0, 10.0).into(),
+            cgmath::Deg(-90.0).into(),
+            cgmath::Deg(-20.0).into(),
+        );
+
+        let projection = Projection::new(
+            swap_chain_descriptor.width,
+            swap_chain_descriptor.height,
+            cgmath::Deg(45.0),
+            0.1,
+            100.0,
+        );
+
+        (camera, projection)
     }
 
     fn create_uniforms(
         camera: &Camera,
+        projection: &Projection,
         render_device: &wgpu::Device,
-    ) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
+    ) -> (
+        Uniforms,
+        wgpu::Buffer,
+        wgpu::BindGroupLayout,
+        wgpu::BindGroup,
+    ) {
         let mut uniforms = Uniforms::new();
-        uniforms.update_view_proj(camera);
+        uniforms.update_view_projection(camera, projection);
 
         let uniform_buffer = render_device.create_buffer_init(&BufferInitDescriptor {
             label: Some("uniform_buffer"),
@@ -254,7 +278,12 @@ impl State {
             label: Some("uniform_bind_group"),
         });
 
-        (uniform_bind_group_layout, uniform_bind_group)
+        (
+            uniforms,
+            uniform_buffer,
+            uniform_bind_group_layout,
+            uniform_bind_group,
+        )
     }
 
     fn create_light(
@@ -345,9 +374,10 @@ impl State {
 
         let (texture_layout, texture_bind_group) = Self::create_textures(&render_device, &queue);
 
-        let camera = Self::create_camera(&swap_chain_descriptor);
+        let (camera, projection) = Self::create_camera(&swap_chain_descriptor);
 
-        let (uniform_layout, uniform_bind_group) = Self::create_uniforms(&camera, &render_device);
+        let (uniforms, uniform_buffer, uniform_layout, uniform_bind_group) =
+            Self::create_uniforms(&camera, &projection, &render_device);
 
         let (light, light_buffer, light_layout, light_bind_group) =
             Self::create_light(&render_device);
@@ -382,14 +412,22 @@ impl State {
             render_pipeline,
             vertex_buffer,
             index_buffer,
+            uniforms,
+            uniform_buffer,
             uniform_bind_group,
             texture_bind_group,
+            camera,
+            projection,
             instances,
             instance_buffer,
             depth_texture,
-            light,
-            light_buffer,
+            _light: light,
+            _light_buffer: light_buffer,
             light_bind_group,
+            mouse_grabbed: false,
+
+            right_speed: 0.0,
+            forward_speed: 0.0,
         }
     }
 
@@ -398,6 +436,8 @@ impl State {
         self.size = new_size;
         self.swap_chain_descriptor.width = new_size.width;
         self.swap_chain_descriptor.height = new_size.height;
+
+        self.projection.resize(new_size.width, new_size.height);
 
         self.depth_texture = Texture::create_depth_texture(
             &self.render_device,
@@ -410,19 +450,58 @@ impl State {
             .create_swap_chain(&self.render_surface, &self.swap_chain_descriptor);
     }
 
-    #[allow(unused_variables)]
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        false
+    fn input_keyboard(&mut self, key_code: &VirtualKeyCode, state: &ElementState) {
+        let amount = if state == &ElementState::Pressed {
+            1.0
+        } else {
+            -1.0
+        };
+
+        match key_code {
+            VirtualKeyCode::W => self.forward_speed += amount,
+            VirtualKeyCode::S => self.forward_speed -= amount,
+            VirtualKeyCode::A => self.right_speed -= amount,
+            VirtualKeyCode::D => self.right_speed += amount,
+            _ => (),
+        }
     }
 
-    pub fn update(&mut self) {
-        let old_position: cgmath::Vector3<_> = self.light.position.into();
-        self.light.position =
-            (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(1.0))
-                * old_position)
-                .into();
-        self.queue
-            .write_buffer(&self.light_buffer, 0, bytemuck::cast_slice(&[self.light]));
+    fn input_mouse(&mut self, dx: f64, dy: f64) {
+        if self.mouse_grabbed {
+            self.camera.yaw += cgmath::Rad(dx as f32 * 0.005);
+            self.camera.pitch -= cgmath::Rad(dy as f32 * 0.005);
+        }
+    }
+
+    pub fn input(&mut self, event: &DeviceEvent) {
+        match event {
+            DeviceEvent::Key(KeyboardInput {
+                virtual_keycode: Some(key),
+                state,
+                ..
+            }) => self.input_keyboard(key, state),
+            DeviceEvent::MouseMotion { delta: (dx, dy) } => self.input_mouse(*dx, *dy),
+            _ => (),
+        }
+    }
+
+    pub fn update(&mut self, dt: Duration) {
+        let dt_secs = dt.as_secs_f32();
+
+        // Move forward/backward and left/right
+        let (yaw_sin, yaw_cos) = self.camera.yaw.0.sin_cos();
+        let forward = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
+        let right = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
+        self.camera.position += forward * self.forward_speed * 6.0 * dt_secs;
+        self.camera.position += right * self.right_speed * 6.0 * dt_secs;
+
+        self.uniforms
+            .update_view_projection(&self.camera, &self.projection);
+        self.queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.uniforms]),
+        );
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {

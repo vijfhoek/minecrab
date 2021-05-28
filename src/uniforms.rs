@@ -1,6 +1,6 @@
 use cgmath::SquareMatrix;
 
-use crate::camera::Camera;
+use crate::camera::{Camera, Projection};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -17,8 +17,8 @@ impl Uniforms {
         }
     }
 
-    pub fn update_view_proj(&mut self, camera: &Camera) {
-        self.view_position = camera.eye.to_homogeneous().into();
-        self.view_projection = camera.build_view_projection_matrix().into();
+    pub fn update_view_projection(&mut self, camera: &Camera, projection: &Projection) {
+        self.view_position = camera.position.to_homogeneous().into();
+        self.view_projection = (projection.calculate_matrix() * camera.calculate_matrix()).into();
     }
 }

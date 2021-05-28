@@ -1,44 +1,17 @@
 mod camera;
 mod texture;
 mod uniforms;
+mod vertex;
 
-use std::{iter, mem::size_of, time::Instant};
-use wgpu::{util::DeviceExt, BufferAddress};
+use std::{iter, time::Instant};
+use wgpu::util::DeviceExt;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
 
-use crate::{camera::Camera, texture::Texture, uniforms::Uniforms};
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 3],
-    texture_coordinates: [f32; 2],
-}
-
-impl Vertex {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: size_of::<Vertex>() as BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: size_of::<[f32; 3]>() as BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
+use crate::{camera::Camera, texture::Texture, uniforms::Uniforms, vertex::Vertex};
 
 const VERTICES: &[Vertex] = &[
     Vertex {

@@ -1,5 +1,7 @@
 mod camera;
 mod cube;
+mod instance;
+mod light;
 mod state;
 mod texture;
 mod uniforms;
@@ -7,6 +9,7 @@ mod vertex;
 
 use std::time::Instant;
 use winit::{
+    dpi::{PhysicalSize, Size},
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
@@ -18,7 +21,11 @@ fn main() {
     env_logger::init();
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
-        .with_title("\u{1f980}\u{1f980}\u{1f980}\u{1f980}\u{1f980}")
+        .with_title(r#"minecrab"#)
+        .with_inner_size(Size::Physical(PhysicalSize {
+            width: 1280,
+            height: 720,
+        }))
         .build(&event_loop)
         .unwrap();
 

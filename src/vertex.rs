@@ -5,6 +5,7 @@ use std::mem::size_of;
 pub struct Vertex {
     pub position: [f32; 3],
     pub texture_coordinates: [f32; 2],
+    pub normal: [f32; 3],
 }
 
 impl Vertex {
@@ -22,6 +23,11 @@ impl Vertex {
                     offset: size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: size_of::<[f32; 3 + 2]>() as wgpu::BufferAddress,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
             ],
         }

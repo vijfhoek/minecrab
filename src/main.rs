@@ -8,6 +8,7 @@ mod state;
 mod texture;
 mod uniforms;
 mod vertex;
+mod world_state;
 
 use std::time::Instant;
 use winit::{
@@ -95,7 +96,7 @@ fn main() {
                 match state.render() {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
-                    Err(wgpu::SwapChainError::Lost) => state.resize(state.size),
+                    Err(wgpu::SwapChainError::Lost) => state.resize(state.window_size),
                     // The system is out of memory, we should probably quit
                     Err(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     // All other errors (Outdated, Timeout) should be resolved by the next frame

@@ -36,20 +36,10 @@ impl Chunk {
             for (z, z_blocks) in y_blocks.iter().enumerate() {
                 for (x, block) in z_blocks.iter().enumerate() {
                     if let Some(block) = block {
-                        let position = Vector3 {
-                            x: x as f32,
-                            y: y as f32,
-                            z: z as f32,
-                        };
-
-                        let rotation = Quaternion::from_axis_angle(Vector3::unit_z(), Deg(0.0));
-
+                        let position = Vector3::new(x as f32, y as f32, z as f32);
                         let instances = map.entry(block.block_type).or_default();
-
                         instances.push(Instance {
-                            position,
-                            rotation,
-                            block_type: block.block_type,
+                            position: position.into(),
                         });
                     }
                 }

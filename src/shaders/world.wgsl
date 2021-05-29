@@ -30,32 +30,17 @@ struct VertexOutput {
 };
 
 struct InstanceInput {
-    [[location(5)]] model_matrix_0: vec4<f32>;
-    [[location(6)]] model_matrix_1: vec4<f32>;
-    [[location(7)]] model_matrix_2: vec4<f32>;
-    [[location(8)]] model_matrix_3: vec4<f32>;
-    [[location(9)]] texture_index: u32;
+    [[location(5)]] position: vec3<f32>;
 };
 
 
 [[stage(vertex)]]
 fn main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
-    let model_matrix = mat4x4<f32>(
-        instance.model_matrix_0,
-        instance.model_matrix_1,
-        instance.model_matrix_2,
-        instance.model_matrix_3,
-    );
-
     var out: VertexOutput;
     out.texture_coordinates = model.texture_coordinates;
     out.world_normal = model.normal;
-
-    var world_position: vec4<f32> = model_matrix * vec4<f32>(model.position, 1.0);
-    out.world_position = world_position.xyz;
-
-    out.clip_position = uniforms.view_projection * model_matrix * vec4<f32>(model.position, 1.0);
-
+    out.world_position = model.position + instance.position;
+    out.clip_position = uniforms.view_projection * vec4<f32>(out.world_position, 1.0);
     return out;
 }
 

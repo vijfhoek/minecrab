@@ -4,7 +4,7 @@ use image::EncodableLayout;
 
 pub struct Texture {
     pub texture: wgpu::Texture,
-    pub sampler: wgpu::Sampler,
+    pub sampler: Option<wgpu::Sampler>,
     pub view: wgpu::TextureView,
 }
 
@@ -48,7 +48,7 @@ impl Texture {
 
         Self {
             texture,
-            sampler,
+            sampler: Some(sampler),
             view,
         }
     }
@@ -94,20 +94,16 @@ impl Texture {
             texture_size,
         );
 
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..wgpu::SamplerDescriptor::default()
+        let view = texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some(&format!("texture_view_{}", label)),
+            dimension: Some(wgpu::TextureViewDimension::D2),
+            array_layer_count: NonZeroU32::new(1),
+            ..wgpu::TextureViewDescriptor::default()
         });
 
         Ok(Self {
             texture,
-            sampler,
+            sampler: None,
             view,
         })
     }

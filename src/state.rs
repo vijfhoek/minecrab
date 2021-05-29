@@ -1,6 +1,9 @@
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
-use cgmath::{InnerSpace, Rotation3};
+use cgmath::{EuclideanSpace, InnerSpace, Rad};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use winit::{
     event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
@@ -9,6 +12,7 @@ use winit::{
 
 use crate::{
     camera::{Camera, Projection},
+    chunk::{Block, BlockType, Chunk},
     cube,
     instance::{Instance, InstanceRaw},
     light::Light,
@@ -16,8 +20,6 @@ use crate::{
     uniforms::Uniforms,
     vertex::Vertex,
 };
-
-const NUM_INSTANCES_PER_ROW: u32 = 10;
 
 pub struct State {
     render_surface: wgpu::Surface,
@@ -29,10 +31,10 @@ pub struct State {
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
-    texture_bind_group: wgpu::BindGroup,
+    texture_bind_groups: HashMap<BlockType, wgpu::BindGroup>,
     uniform_bind_group: wgpu::BindGroup,
-    instances: Vec<Instance>,
-    instance_buffer: wgpu::Buffer,
+    instance_lists: Vec<(BlockType, Vec<Instance>)>,
+    instance_buffers: Vec<(BlockType, wgpu::Buffer)>,
     depth_texture: Texture,
     _light: Light,
     _light_buffer: wgpu::Buffer,
@@ -129,8 +131,12 @@ impl State {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("render_device"),
-                    features: wgpu::Features::NON_FILL_POLYGON_MODE,
-                    limits: wgpu::Limits::default(),
+                    features: wgpu::Features::NON_FILL_POLYGON_MODE
+                        | wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY,
+                    limits: wgpu::Limits {
+                        max_push_constant_size: 4,
+                        ..wgpu::Limits::default()
+                    },
                 },
                 None,
             )
@@ -165,31 +171,31 @@ impl State {
     fn create_textures(
         render_device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
-        let texture = Texture::from_bytes(
+    ) -> (wgpu::BindGroupLayout, HashMap<BlockType, wgpu::BindGroup>) {
+        let dirt_texture = Texture::from_bytes(
             render_device,
             queue,
-            include_bytes!("../assets/block/cobblestone.png"),
-            "dirt_diffuse",
+            include_bytes!("../assets/block/dirt.png"),
+            "dirt",
         )
         .unwrap();
 
-        let texture_bind_group_layout =
+        let cobblestone_texture = Texture::from_bytes(
+            render_device,
+            queue,
+            include_bytes!("../assets/block/cobblestone.png"),
+            "cobblestone",
+        )
+        .unwrap();
+
+        let sampler = render_device.create_sampler(&wgpu::SamplerDescriptor::default());
+
+        let bind_group_layout =
             render_device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("texture_bind_group_layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
                         visibility: wgpu::ShaderStage::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
                             comparison: false,
@@ -197,31 +203,52 @@ impl State {
                         },
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
                 ],
             });
 
-        let texture_bind_group = render_device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("dirt_diffuse_bind_group"),
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
-                },
-            ],
-        });
+        let bind_groups: HashMap<BlockType, wgpu::BindGroup> = [
+            (BlockType::Dirt, dirt_texture),
+            (BlockType::Cobblestone, cobblestone_texture),
+        ]
+        .iter()
+        .map(|(block_type, texture)| {
+            (
+                *block_type,
+                render_device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("texture_bind_group"),
+                    layout: &bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Sampler(&sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(&texture.view),
+                        },
+                    ],
+                }),
+            )
+        })
+        .collect();
 
-        (texture_bind_group_layout, texture_bind_group)
+        (bind_group_layout, bind_groups)
     }
 
     fn create_camera(swap_chain_descriptor: &wgpu::SwapChainDescriptor) -> (Camera, Projection) {
         let camera = Camera::new(
             (0.0, 5.0, 10.0).into(),
-            cgmath::Deg(-90.0).into(),
+            cgmath::Deg(0.0).into(),
             cgmath::Deg(-20.0).into(),
         );
 
@@ -334,38 +361,62 @@ impl State {
         )
     }
 
-    fn create_instances(render_device: &wgpu::Device) -> (Vec<Instance>, wgpu::Buffer) {
-        let instances = (0..NUM_INSTANCES_PER_ROW as i32)
-            .flat_map(|z| {
-                (0..NUM_INSTANCES_PER_ROW as i32).map(move |x| {
-                    let position = cgmath::Vector3 {
-                        x: (x - NUM_INSTANCES_PER_ROW as i32 / 2) as f32 * 2.0,
-                        y: 0.0,
-                        z: (z - NUM_INSTANCES_PER_ROW as i32 / 2) as f32 * 2.0,
-                    };
+    fn create_instances(
+        render_device: &wgpu::Device,
+        chunk: &Chunk,
+    ) -> (
+        Vec<(BlockType, Vec<Instance>)>,
+        Vec<(BlockType, wgpu::Buffer)>,
+    ) {
+        let instance_lists = chunk.to_instances();
 
-                    let rotation = cgmath::Quaternion::from_axis_angle(
-                        cgmath::Vector3::unit_z(),
-                        cgmath::Deg(0.0),
-                    );
+        let instance_buffers = instance_lists
+            .iter()
+            .map(|(block_type, instance_list)| {
+                let instance_data: Vec<InstanceRaw> =
+                    instance_list.iter().map(Instance::to_raw).collect();
 
-                    Instance { position, rotation }
-                })
+                (
+                    *block_type,
+                    render_device.create_buffer_init(&BufferInitDescriptor {
+                        label: Some("instance_buffer"),
+                        contents: bytemuck::cast_slice(&instance_data),
+                        usage: wgpu::BufferUsage::VERTEX,
+                    }),
+                )
             })
-            .collect::<Vec<_>>();
+            .collect();
 
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        let instance_buffer = render_device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsage::VERTEX,
-        });
-
-        (instances, instance_buffer)
+        (instance_lists, instance_buffers)
     }
 
     pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
+
+        let mut chunk = Chunk {
+            blocks: [
+                [[Some(Block {
+                    block_type: BlockType::Cobblestone,
+                }); 16]; 16],
+                [[Some(Block {
+                    block_type: BlockType::Dirt,
+                }); 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+                [[None; 16]; 16],
+            ],
+        };
 
         let (render_surface, adapter, render_device, queue) =
             Self::create_render_device(window).await;
@@ -373,9 +424,19 @@ impl State {
         let (swap_chain_descriptor, swap_chain) =
             Self::create_swap_chain(window, &adapter, &render_device, &render_surface);
 
-        let (texture_layout, texture_bind_group) = Self::create_textures(&render_device, &queue);
+        let (texture_layout, texture_bind_groups) = Self::create_textures(&render_device, &queue);
 
         let (camera, projection) = Self::create_camera(&swap_chain_descriptor);
+
+        let dda_start = Instant::now();
+        let coll_pos = chunk
+            .dda(camera.position.to_vec(), camera.direction())
+            .unwrap();
+        dbg!(dda_start.elapsed());
+
+        chunk.blocks[coll_pos.y][coll_pos.z][coll_pos.x] = Some(Block {
+            block_type: BlockType::Cobblestone,
+        });
 
         let (uniforms, uniform_buffer, uniform_layout, uniform_bind_group) =
             Self::create_uniforms(&camera, &projection, &render_device);
@@ -398,7 +459,7 @@ impl State {
             usage: wgpu::BufferUsage::INDEX,
         });
 
-        let (instances, instance_buffer) = Self::create_instances(&render_device);
+        let (instance_lists, instance_buffers) = Self::create_instances(&render_device, &chunk);
 
         let depth_texture =
             Texture::create_depth_texture(&render_device, &swap_chain_descriptor, "depth_texture");
@@ -416,11 +477,11 @@ impl State {
             uniforms,
             uniform_buffer,
             uniform_bind_group,
-            texture_bind_group,
+            texture_bind_groups,
             camera,
             projection,
-            instances,
-            instance_buffer,
+            instance_lists,
+            instance_buffers,
             depth_texture,
             _light: light,
             _light_buffer: light_buffer,
@@ -470,16 +531,23 @@ impl State {
         }
     }
 
+    fn update_camera(&mut self, dx: f64, dy: f64) {
+        self.camera.yaw += Rad(dx as f32 * 0.005);
+        self.camera.pitch -= Rad(dy as f32 * 0.005);
+
+        if self.camera.pitch < Rad::from(cgmath::Deg(-80.0)) {
+            self.camera.pitch = Rad::from(cgmath::Deg(-80.0));
+        } else if self.camera.pitch > Rad::from(cgmath::Deg(89.0)) {
+            self.camera.pitch = Rad::from(cgmath::Deg(89.0));
+        }
+    }
+
+    fn update_aim(&mut self) {}
+
     fn input_mouse(&mut self, dx: f64, dy: f64) {
         if self.mouse_grabbed {
-            self.camera.yaw += cgmath::Rad(dx as f32 * 0.005);
-            self.camera.pitch -= cgmath::Rad(dy as f32 * 0.005);
-
-            if self.camera.pitch < cgmath::Rad::from(cgmath::Deg(-80.0)) {
-                self.camera.pitch = cgmath::Rad::from(cgmath::Deg(-80.0));
-            } else if self.camera.pitch > cgmath::Rad::from(cgmath::Deg(89.0)) {
-                self.camera.pitch = cgmath::Rad::from(cgmath::Deg(89.0));
-            }
+            self.update_camera(dx, dy);
+            self.update_aim();
         }
     }
 
@@ -551,20 +619,25 @@ impl State {
 
             render_pass.set_pipeline(&self.render_pipeline);
 
-            render_pass.set_bind_group(0, &self.texture_bind_group, &[]);
             render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
             render_pass.set_bind_group(2, &self.light_bind_group, &[]);
 
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            render_pass.draw_indexed(
-                0..cube::INDICES.len() as u32,
-                0,
-                0..self.instances.len() as u32,
-            );
+            for (i, (block_type, instance_list)) in self.instance_lists.iter().enumerate() {
+                let (_, instance_buffer) = &self.instance_buffers[i];
+
+                let texture_bind_group = &self.texture_bind_groups[block_type];
+                render_pass.set_bind_group(0, texture_bind_group, &[]);
+
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                render_pass.draw_indexed(
+                    0..cube::INDICES.len() as u32,
+                    0,
+                    0..instance_list.len() as u32,
+                );
+            }
         }
 
         self.queue.submit(std::iter::once(render_encoder.finish()));

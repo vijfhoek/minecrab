@@ -1,12 +1,17 @@
+use crate::chunk::BlockType;
+
+#[derive(Debug)]
 pub struct Instance {
     pub position: cgmath::Vector3<f32>,
     pub rotation: cgmath::Quaternion<f32>,
+    pub block_type: BlockType,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct InstanceRaw {
     model: [[f32; 4]; 4],
+    texture_index: u32,
 }
 
 impl Instance {
@@ -16,6 +21,7 @@ impl Instance {
 
         InstanceRaw {
             model: (position * rotation).into(),
+            texture_index: self.block_type.texture_index(),
         }
     }
 }
@@ -46,6 +52,11 @@ impl InstanceRaw {
                     offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
                     shader_location: 8,
                     format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
+                    shader_location: 9,
+                    format: wgpu::VertexFormat::Uint32,
                 },
             ],
         }

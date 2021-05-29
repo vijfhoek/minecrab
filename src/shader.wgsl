@@ -34,6 +34,7 @@ struct InstanceInput {
     [[location(6)]] model_matrix_1: vec4<f32>;
     [[location(7)]] model_matrix_2: vec4<f32>;
     [[location(8)]] model_matrix_3: vec4<f32>;
+    [[location(9)]] texture_index: u32;
 };
 
 
@@ -58,16 +59,13 @@ fn main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     return out;
 }
 
-[[group(0), binding(0)]]
-var texture_diffuse: texture_2d<f32>;
-[[group(0), binding(1)]]
-var sampler_diffuse: sampler;
-
+[[group(0), binding(0)]] var sampler_diffuse: sampler;
+[[group(0), binding(1)]] var texture: texture_2d<f32>;
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let object_color: vec4<f32> =
-        textureSample(texture_diffuse, sampler_diffuse, in.texture_coordinates);
+        textureSample(texture, sampler_diffuse, in.texture_coordinates);
 
     let ambient_strength = 0.2;
     let ambient_color = light.color * ambient_strength;

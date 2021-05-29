@@ -23,14 +23,16 @@ impl Camera {
         }
     }
 
-    pub fn calculate_matrix(&self) -> Matrix4<f32> {
-        let direction = Vector3::new(
+    pub fn direction(&self) -> Vector3<f32> {
+        Vector3::new(
             self.yaw.0.cos() * self.pitch.0.cos(),
             self.pitch.0.sin(),
             self.yaw.0.sin() * self.pitch.0.cos(),
-        );
+        )
+    }
 
-        Matrix4::look_to_rh(self.position, direction, Vector3::unit_y())
+    pub fn calculate_matrix(&self) -> Matrix4<f32> {
+        Matrix4::look_to_rh(self.position, self.direction(), Vector3::unit_y())
     }
 }
 

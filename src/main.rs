@@ -1,4 +1,6 @@
+mod aabb;
 mod camera;
+mod chunk;
 mod cube;
 mod instance;
 mod light;
@@ -21,7 +23,7 @@ fn main() {
     env_logger::init();
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
-        .with_title(r#"minecrab"#)
+        .with_title("minecrab")
         .with_inner_size(Size::Physical(PhysicalSize {
             width: 1280,
             height: 720,
@@ -29,10 +31,7 @@ fn main() {
         .build(&event_loop)
         .unwrap();
 
-    use futures::executor::block_on;
-
-    // Since main can't be async, we're going to need to block
-    let mut state = block_on(State::new(&window));
+    let mut state = futures::executor::block_on(State::new(&window));
 
     let mut frames = 0;
     let mut instant = Instant::now();

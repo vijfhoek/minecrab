@@ -428,13 +428,11 @@ impl State {
 
         let (camera, projection) = Self::create_camera(&swap_chain_descriptor);
 
-        let dda_start = Instant::now();
-        let coll_pos = chunk
+        let pointy_at = chunk
             .dda(camera.position.to_vec(), camera.direction())
             .unwrap();
-        dbg!(dda_start.elapsed());
 
-        chunk.blocks[coll_pos.y][coll_pos.z][coll_pos.x] = Some(Block {
+        chunk.blocks[pointy_at.y][pointy_at.z][pointy_at.x] = Some(Block {
             block_type: BlockType::Cobblestone,
         });
 

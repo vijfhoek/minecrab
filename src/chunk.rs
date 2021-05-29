@@ -70,30 +70,26 @@ impl Chunk {
     pub fn dda(&self, position: Vector3<f32>, direction: Vector3<f32>) -> Option<Vector3<usize>> {
         assert!(f32::abs(direction.magnitude() - 1.0) < f32::EPSILON);
 
-        let scale_x = Self::calc_scale(direction, direction.x);
-        let scale_y = Self::calc_scale(direction, direction.y);
-        let scale_z = Self::calc_scale(direction, direction.z);
-        dbg!(direction, scale_x, scale_y, scale_z);
+        let scale = Vector3::new(
+            Self::calc_scale(direction, direction.x),
+            Self::calc_scale(direction, direction.y),
+            Self::calc_scale(direction, direction.z),
+        );
 
         let mut new_position = position;
-
-        let mut x_length = 0.0;
-        let mut y_length = 0.0;
-        let mut z_length = 0.0;
+        let mut lengths = Vector3::new(0.0, 0.0, 0.0);
         loop {
-            let new_x_length = x_length + scale_x;
-            let new_y_length = y_length + scale_y;
-            let new_z_length = z_length + scale_z;
+            let new_lengths = lengths + scale;
 
-            if new_x_length < f32::min(new_y_length, new_z_length) {
-                x_length = new_x_length;
-                new_position += direction * scale_x;
-            } else if new_y_length < f32::min(new_x_length, new_z_length) {
-                y_length = new_y_length;
-                new_position += direction * scale_y;
-            } else if new_z_length < f32::min(new_x_length, new_y_length) {
-                z_length = new_z_length;
-                new_position += direction * scale_z;
+            if new_lengths.x < f32::min(new_lengths.y, new_lengths.z) {
+                lengths.x = new_lengths.x;
+                new_position += direction * scale.x;
+            } else if new_lengths.y < f32::min(new_lengths.x, new_lengths.z) {
+                lengths.y = new_lengths.y;
+                new_position += direction * scale.y;
+            } else if new_lengths.z < f32::min(new_lengths.x, new_lengths.y) {
+                lengths.z = new_lengths.z;
+                new_position += direction * scale.z;
             }
 
             let pos_usize = new_position.map(|field| field.round() as usize);

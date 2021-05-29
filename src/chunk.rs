@@ -59,7 +59,7 @@ impl Chunk {
         }
     }
 
-    pub fn dda(&self, origin: Vector3<f32>, direction: Vector3<f32>) -> Option<Vector3<usize>> {
+    pub fn raycast(&self, origin: Vector3<f32>, direction: Vector3<f32>) -> Option<Vector3<usize>> {
         let direction = direction.normalize();
 
         let scale = Vector3::new(

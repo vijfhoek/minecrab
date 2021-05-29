@@ -359,7 +359,7 @@ impl State {
         let camera = &self.world_state.camera;
         let chunk = &mut self.world_state.chunk;
 
-        let coords = chunk.dda(camera.position.to_vec(), camera.direction());
+        let coords = chunk.raycast(camera.position.to_vec(), camera.direction());
         if coords != chunk.highlighted {
             chunk.highlighted = coords;
             self.world_state.update_chunk(&self.render_queue);

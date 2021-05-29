@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use cgmath::{InnerSpace, Rad};
+use cgmath::{EuclideanSpace, InnerSpace, Rad};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use winit::{
     event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
@@ -21,12 +21,12 @@ pub const CROSSHAIR_VERTICES: &[Vertex] = &[
     },
     Vertex {
         position: [UI_SCALE_X * 8.0, UI_SCALE_Y * 8.0, 0.0],
-        texture_coordinates: [256.0 / 256.0, 0.0 / 256.0],
+        texture_coordinates: [1.0, 0.0 / 256.0],
         normal: [0.0, 0.0, 0.0],
     },
     Vertex {
         position: [UI_SCALE_X * 8.0, -UI_SCALE_Y * 8.0, 0.0],
-        texture_coordinates: [256.0 / 256.0, 16.0 / 256.0],
+        texture_coordinates: [1.0, 16.0 / 256.0],
         normal: [0.0, 0.0, 0.0],
     },
     Vertex {
@@ -77,7 +77,6 @@ pub struct State {
 
     world_state: WorldState,
 
-    ui_texture_bind_group_layout: wgpu::BindGroupLayout,
     ui_texture_bind_group: wgpu::BindGroup,
     ui_render_pipeline: wgpu::RenderPipeline,
     ui_crosshair_vertex_buffer: wgpu::Buffer,
@@ -302,7 +301,6 @@ impl State {
 
             ui_render_pipeline,
             ui_texture_bind_group,
-            ui_texture_bind_group_layout,
             ui_crosshair_vertex_buffer,
             ui_crosshair_index_buffer,
 
@@ -346,17 +344,27 @@ impl State {
     }
 
     fn update_camera(&mut self, dx: f64, dy: f64) {
-        self.world_state.camera.yaw += Rad(dx as f32 * 0.003);
-        self.world_state.camera.pitch -= Rad(dy as f32 * 0.003);
+        let camera = &mut self.world_state.camera;
+        camera.yaw += Rad(dx as f32 * 0.003);
+        camera.pitch -= Rad(dy as f32 * 0.003);
 
-        if self.world_state.camera.pitch < Rad::from(cgmath::Deg(-80.0)) {
-            self.world_state.camera.pitch = Rad::from(cgmath::Deg(-80.0));
-        } else if self.world_state.camera.pitch > Rad::from(cgmath::Deg(89.9)) {
-            self.world_state.camera.pitch = Rad::from(cgmath::Deg(89.9));
+        if camera.pitch < Rad::from(cgmath::Deg(-80.0)) {
+            camera.pitch = Rad::from(cgmath::Deg(-80.0));
+        } else if camera.pitch > Rad::from(cgmath::Deg(89.9)) {
+            camera.pitch = Rad::from(cgmath::Deg(89.9));
         }
     }
 
-    fn update_aim(&mut self) {}
+    fn update_aim(&mut self) {
+        let camera = &self.world_state.camera;
+        let chunk = &mut self.world_state.chunk;
+
+        let coords = chunk.dda(camera.position.to_vec(), camera.direction());
+        if coords != chunk.highlighted {
+            chunk.highlighted = coords;
+            self.world_state.update_chunk(&self.render_queue);
+        }
+    }
 
     fn input_mouse(&mut self, dx: f64, dy: f64) {
         if self.mouse_grabbed {
@@ -443,10 +451,8 @@ impl State {
                 wgpu::IndexFormat::Uint16,
             );
 
-            for (i, (block_type, instance_list)) in
-                self.world_state.instance_lists.iter().enumerate()
-            {
-                let (_, instance_buffer) = &self.world_state.instance_buffers[i];
+            for (block_type, instance_list) in &self.world_state.instance_lists {
+                let instance_buffer = &self.world_state.instance_buffers[block_type];
 
                 let texture_bind_group = &self.world_state.texture_bind_groups[block_type];
                 render_pass.set_bind_group(0, texture_bind_group, &[]);

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use cgmath::EuclideanSpace;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use winit::dpi::PhysicalSize;
 
@@ -26,9 +25,10 @@ pub struct WorldState {
     pub instance_lists: Vec<(BlockType, Vec<Instance>)>,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
-    pub instance_buffers: Vec<(BlockType, wgpu::Buffer)>,
+    pub instance_buffers: HashMap<BlockType, wgpu::Buffer>,
     pub depth_texture: Texture,
     pub light_bind_group: wgpu::BindGroup,
+    pub chunk: Chunk,
 }
 
 impl WorldState {
@@ -294,7 +294,7 @@ impl WorldState {
         chunk: &Chunk,
     ) -> (
         Vec<(BlockType, Vec<Instance>)>,
-        Vec<(BlockType, wgpu::Buffer)>,
+        HashMap<BlockType, wgpu::Buffer>,
     ) {
         let instance_lists = chunk.to_instances();
 
@@ -306,7 +306,7 @@ impl WorldState {
                     render_device.create_buffer_init(&BufferInitDescriptor {
                         label: Some("instance_buffer"),
                         contents: bytemuck::cast_slice(&instance_list),
-                        usage: wgpu::BufferUsage::VERTEX,
+                        usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
                     }),
                 )
             })
@@ -315,12 +315,24 @@ impl WorldState {
         (instance_lists, instance_buffers)
     }
 
+    pub fn update_chunk(&mut self, render_queue: &wgpu::Queue) {
+        let instance_lists = self.chunk.to_instances();
+
+        for (block_type, instance_list) in instance_lists {
+            if let Some(instance_buffer) = self.instance_buffers.get_mut(&block_type) {
+                render_queue.write_buffer(instance_buffer, 0, bytemuck::cast_slice(&instance_list));
+            } else {
+                todo!();
+            }
+        }
+    }
+
     pub fn new(
         render_device: &wgpu::Device,
         queue: &wgpu::Queue,
         swap_chain_descriptor: &wgpu::SwapChainDescriptor,
     ) -> WorldState {
-        let mut chunk = Chunk {
+        let chunk = Chunk {
             blocks: [
                 [[Some(Block {
                     block_type: BlockType::Cobblestone,
@@ -343,20 +355,13 @@ impl WorldState {
                 [[None; 16]; 16],
                 [[None; 16]; 16],
             ],
+            highlighted: None,
         };
 
         let (world_texture_layout, texture_bind_groups) =
             Self::create_textures(&render_device, &queue);
 
         let (camera, projection) = Self::create_camera(&swap_chain_descriptor);
-
-        let pointy_at = chunk
-            .dda(camera.position.to_vec(), camera.direction())
-            .unwrap();
-
-        chunk.blocks[pointy_at.y][pointy_at.z][pointy_at.x] = Some(Block {
-            block_type: BlockType::Cobblestone,
-        });
 
         let (uniforms, uniform_buffer, world_uniform_layout, uniform_bind_group) =
             Self::create_uniforms(&camera, &projection, &render_device);
@@ -398,12 +403,13 @@ impl WorldState {
             texture_bind_groups,
             camera,
             projection,
-            light_bind_group,
+            instance_lists,
             vertex_buffer,
             index_buffer,
-            instance_lists,
             instance_buffers,
             depth_texture,
+            light_bind_group,
+            chunk,
         }
     }
 

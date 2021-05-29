@@ -27,10 +27,12 @@ struct VertexOutput {
     [[location(0)]] texture_coordinates: vec2<f32>;
     [[location(1)]] world_normal: vec3<f32>;
     [[location(2)]] world_position: vec3<f32>;
+    [[location(3)]] highlighted: i32;
 };
 
 struct InstanceInput {
     [[location(5)]] position: vec3<f32>;
+    [[location(6)]] highlighted: i32;
 };
 
 
@@ -41,6 +43,7 @@ fn main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     out.world_normal = model.normal;
     out.world_position = model.position + instance.position;
     out.clip_position = uniforms.view_projection * vec4<f32>(out.world_position, 1.0);
+    out.highlighted = instance.highlighted;
     return out;
 }
 
@@ -65,6 +68,10 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let specular_strength = pow(max(dot(in.world_normal, half_direction), 0.0), 32.0);
     let specular_color = specular_strength * light.color;
 
-    let result = (ambient_color + diffuse_color + specular_color) * object_color.xyz;
+    var result: vec3<f32> = (ambient_color + diffuse_color + specular_color) * object_color.xyz;
+    if (in.highlighted != 0) {
+        result = result + 0.5;
+    }
+
     return vec4<f32>(result, object_color.a);
 }

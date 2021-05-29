@@ -43,24 +43,25 @@ impl Chunk {
         map.drain().collect()
     }
 
-    fn get_block(&self, x: usize, y: usize, z: usize) -> Option<Option<&Block>> {
+    fn get_block(&self, x: usize, y: usize, z: usize) -> Option<&Block> {
         self.blocks
             .get(y)
             .and_then(|blocks| blocks.get(z))
             .and_then(|blocks| blocks.get(x))
-            .map(|block| block.as_ref())
+            .and_then(|block| block.as_ref())
     }
 
-    fn calc_scale(a: Vector3<f32>, b: f32) -> f32 {
-        if b == 0.0 {
+    fn calc_scale(vector: Vector3<f32>, scalar: f32) -> f32 {
+        if scalar == 0.0 {
             f32::INFINITY
         } else {
-            (a / b).magnitude()
+            (vector / scalar).magnitude()
         }
     }
 
     pub fn raycast(&self, origin: Vector3<f32>, direction: Vector3<f32>) -> Option<Vector3<usize>> {
-        let direction = direction.normalize();
+        let origin = origin.map(|field| field.trunc());
+        let dir = direction.normalize();
 
         let scale = Vector3::new(
             Self::calc_scale(direction, direction.x),
@@ -68,36 +69,54 @@ impl Chunk {
             Self::calc_scale(direction, direction.z),
         );
 
-        let mut position = origin;
-        let mut lengths = Vector3::new(0.0, 0.0, 0.0);
-        loop {
-            let new_lengths = lengths + scale;
+        let mut position = origin.map(|x| x as i32);
+        let step: Vector3<i32> = dir.map(|x| x.signum() as i32);
 
-            if new_lengths.x < f32::min(new_lengths.y, new_lengths.z) {
-                lengths.x = new_lengths.x;
-                position += direction * scale.x;
-            } else if new_lengths.y < f32::min(new_lengths.x, new_lengths.z) {
-                lengths.y = new_lengths.y;
-                position += direction * scale.y;
-            } else if new_lengths.z < f32::min(new_lengths.x, new_lengths.y) {
-                lengths.z = new_lengths.z;
-                position += direction * scale.z;
+        // Truncate the origin
+        let mut lengths = Vector3 {
+            x: if dir.x < 0.0 {
+                (origin.x - position.x as f32) * scale.x
+            } else {
+                (position.x as f32 + 1.0 - origin.x) * scale.x
+            },
+            y: if dir.y < 0.0 {
+                (origin.y - position.y as f32) * scale.y
+            } else {
+                (position.y as f32 + 1.0 - origin.y) * scale.y
+            },
+            z: if dir.z < 0.0 {
+                (origin.z - position.z as f32) * scale.z
+            } else {
+                (position.z as f32 + 1.0 - origin.z) * scale.z
+            },
+        };
+
+        while lengths.magnitude() < 100.0 {
+            if lengths.x <= lengths.y && lengths.x <= lengths.z {
+                lengths.x += scale.x;
+                position.x += step.x;
+            } else if lengths.y <= lengths.x && lengths.y <= lengths.z {
+                lengths.y += scale.y;
+                position.y += step.y;
+            } else if lengths.z <= lengths.x && lengths.z <= lengths.y {
+                lengths.z += scale.z;
+                position.z += step.z;
+            } else {
+                return None;
             }
 
-            let position_rounded = position.map(|field| field.round() as usize);
-            let block = self.get_block(position_rounded.x, position_rounded.y, position_rounded.z);
+            let block = self.get_block(
+                position.x as usize,
+                position.y as usize,
+                position.z as usize,
+            );
 
-            match block {
-                None => {
-                    // Went outside the chunk, intersection no longer possible
-                    break None;
-                }
-                Some(None) => (),
-                Some(Some(_)) => {
-                    // Intersected with a block, round position to coordinates and return it.
-                    break Some(position_rounded);
-                }
+            if let Some(_) = block {
+                // Intersected with a block, round position to coordinates and return it.
+                return Some(position.map(|x| x as usize));
             }
         }
+
+        None
     }
 }

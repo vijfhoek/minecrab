@@ -1,10 +1,7 @@
 use crate::instance::Instance;
 use ahash::AHashMap;
 use cgmath::{InnerSpace, Vector3};
-use noise::{
-    utils::{NoiseMapBuilder, PlaneMapBuilder},
-    Fbm,
-};
+use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BlockType {
@@ -30,21 +27,36 @@ pub struct Chunk {
 
 impl Chunk {
     pub fn generate(chunk_x: i32, chunk_y: i32, chunk_z: i32) -> Self {
-        let fbm = Fbm::new();
+        let fbm = noise::Fbm::new();
 
-        let builder = PlaneMapBuilder::new(&fbm)
+        let terrain_noise = PlaneMapBuilder::new(&fbm)
             .set_size(16, 16)
-            .set_x_bounds(chunk_x as f64 * 0.2, chunk_x as f64 * 0.2 + 0.2)
-            .set_y_bounds(chunk_z as f64 * 0.2, chunk_z as f64 * 0.2 + 0.2)
+            .set_x_bounds(chunk_x as f64 * 0.1, chunk_x as f64 * 0.1 + 0.1)
+            .set_y_bounds(chunk_z as f64 * 0.1, chunk_z as f64 * 0.1 + 0.1)
+            .build();
+
+        let stone_noise = PlaneMapBuilder::new(&fbm)
+            .set_size(16, 16)
+            .set_x_bounds(
+                chunk_x as f64 * 0.07 + 11239.0,
+                chunk_x as f64 * 0.07 + 11239.07,
+            )
+            .set_y_bounds(
+                chunk_y as f64 * 0.07 + 11239.0,
+                chunk_y as f64 * 0.07 + 11239.07,
+            )
             .build();
 
         let mut blocks: ChunkBlocks = Default::default();
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                let v = builder.get_value(x, z) * 10.0 + 64.0;
+                let v = terrain_noise.get_value(x, z) * 20.0 + 64.0;
                 let v = v.round() as i32;
 
-                let stone_max = (v - 4 - chunk_y * 16).min(CHUNK_SIZE as i32);
+                let s = stone_noise.get_value(x, z) * 20.0 + 4.5;
+                let s = (s.round() as i32).min(10).max(3);
+
+                let stone_max = (v - s - chunk_y * 16).min(CHUNK_SIZE as i32);
                 for y in 0..stone_max {
                     blocks[y as usize][z][x] = Some(Block {
                         block_type: BlockType::Stone,

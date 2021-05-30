@@ -8,9 +8,10 @@ mod state;
 mod texture;
 mod uniforms;
 mod vertex;
+mod world;
 mod world_state;
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use winit::{
     dpi::{PhysicalSize, Size},
     event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
@@ -35,7 +36,11 @@ fn main() {
     let mut state = futures::executor::block_on(State::new(&window));
 
     let mut frames = 0;
-    let mut instant = Instant::now();
+    let mut frame_instant = Instant::now();
+    let mut elapsed = Duration::from_secs(0);
+
+    let mut frametime_min = Duration::from_secs(1000);
+    let mut frametime_max = Duration::from_secs(0);
 
     let mut last_render_time = Instant::now();
 
@@ -80,16 +85,29 @@ fn main() {
                 _ => {}
             },
             Event::RedrawRequested(_) => {
+                let frame_elapsed = frame_instant.elapsed();
+                frame_instant = Instant::now();
+
+                frametime_min = frametime_min.min(frame_elapsed);
+                frametime_max = frametime_max.max(frame_elapsed);
+                elapsed += frame_elapsed;
+
                 frames += 1;
-                if instant.elapsed().as_secs() >= 1 {
-                    let frametime = instant.elapsed() / frames;
+                if elapsed.as_secs() >= 1 {
+                    let frametime = elapsed / frames;
                     let fps = 1_000_000 / frametime.as_micros();
+                    let fps_max = 1_000_000 / frametime_min.as_micros();
+                    let fps_min = 1_000_000 / frametime_max.as_micros();
+
                     println!(
-                        "{} frames | frametime {:?} | fps {}",
-                        frames, frametime, fps
+                        "{} frames | frametime avg={:?} min={:?} max={:?} | fps avg={} min={} max={}",
+                        frames, frametime, frametime_min, frametime_max, fps, fps_min, fps_max,
                     );
-                    instant = Instant::now();
+
+                    elapsed = Duration::from_secs(0);
                     frames = 0;
+                    frametime_min = Duration::from_secs(1000);
+                    frametime_max = Duration::from_secs(0);
                 }
 
                 let now = Instant::now();

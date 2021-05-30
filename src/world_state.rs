@@ -1,6 +1,7 @@
 use std::{mem::size_of, time::Instant};
 
 use ahash::AHashMap;
+use cgmath::{Vector3, Zero};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BufferAddress, BufferDescriptor,
@@ -16,6 +17,7 @@ use crate::{
     texture::Texture,
     uniforms::Uniforms,
     vertex::Vertex,
+    world::World,
 };
 
 pub struct WorldState {
@@ -26,13 +28,14 @@ pub struct WorldState {
     pub texture_bind_groups: AHashMap<BlockType, wgpu::BindGroup>,
     pub camera: Camera,
     pub projection: Projection,
-    pub instance_lists: Vec<(BlockType, Vec<Instance>)>,
+    pub instance_lists: Vec<(BlockType, Vector3<i32>, Vec<Instance>)>,
     pub vertex_buffer: wgpu::Buffer,
+    pub vertex_buffer_grass: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
-    pub instance_buffers: AHashMap<BlockType, wgpu::Buffer>,
+    pub instance_buffers: AHashMap<(BlockType, Vector3<i32>), wgpu::Buffer>,
     pub depth_texture: Texture,
     pub light_bind_group: wgpu::BindGroup,
-    pub chunk: Chunk,
+    pub world: World,
 }
 
 impl WorldState {
@@ -40,22 +43,6 @@ impl WorldState {
         render_device: &wgpu::Device,
         render_queue: &wgpu::Queue,
     ) -> (wgpu::BindGroupLayout, AHashMap<BlockType, wgpu::BindGroup>) {
-        let dirt_texture = Texture::from_bytes(
-            render_device,
-            render_queue,
-            include_bytes!("../assets/block/dirt.png"),
-            "dirt",
-        )
-        .unwrap();
-
-        let cobblestone_texture = Texture::from_bytes(
-            render_device,
-            render_queue,
-            include_bytes!("../assets/block/cobblestone.png"),
-            "cobblestone",
-        )
-        .unwrap();
-
         let sampler = render_device.create_sampler(&wgpu::SamplerDescriptor::default());
 
         let bind_group_layout =
@@ -85,15 +72,21 @@ impl WorldState {
             });
 
         let bind_groups: AHashMap<BlockType, wgpu::BindGroup> = [
-            (BlockType::Dirt, dirt_texture),
-            (BlockType::Cobblestone, cobblestone_texture),
+            (BlockType::Cobblestone, "assets/block/cobblestone.png"),
+            (BlockType::Dirt, "assets/block/dirt.png"),
+            (BlockType::Grass, "assets/block_temp/grass.png"),
+            (BlockType::Stone, "assets/block/stone.png"),
         ]
         .iter()
-        .map(|(block_type, texture)| {
+        .map(|(block_type, texture_path)| {
+            let bytes = std::fs::read(texture_path).unwrap();
+            let texture =
+                Texture::from_bytes(render_device, render_queue, &bytes, "block texture").unwrap();
+
             (
                 *block_type,
                 render_device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("texture_bind_group"),
+                    label: Some("block texture bind group"),
                     layout: &bind_group_layout,
                     entries: &[
                         wgpu::BindGroupEntry {
@@ -125,7 +118,7 @@ impl WorldState {
             swap_chain_descriptor.height,
             cgmath::Deg(45.0),
             0.1,
-            100.0,
+            500.0,
         );
 
         (camera, projection)
@@ -185,11 +178,10 @@ impl WorldState {
     fn create_light(
         render_device: &wgpu::Device,
     ) -> (Light, wgpu::Buffer, wgpu::BindGroupLayout, wgpu::BindGroup) {
-        let light = Light {
-            position: [5.0, 5.0, 5.0],
-            _padding: 0,
-            color: [1.0, 1.0, 1.0],
-        };
+        let light = Light::new(
+            Vector3::new(256.0, 500.0, 200.0),
+            Vector3::new(1.0, 1.0, 1.0),
+        );
 
         let light_buffer = render_device.create_buffer_init(&BufferInitDescriptor {
             label: Some("light_buffer"),
@@ -209,7 +201,7 @@ impl WorldState {
                     },
                     count: None,
                 }],
-                label: None,
+                label: Some("light_bind_group_layout"),
             });
 
         let light_bind_group = render_device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -218,7 +210,7 @@ impl WorldState {
                 binding: 0,
                 resource: light_buffer.as_entire_binding(),
             }],
-            label: None,
+            label: Some("light_bind_group"),
         });
 
         (
@@ -249,6 +241,8 @@ impl WorldState {
                 push_constant_ranges: &[],
             });
 
+        let wireframe = false;
+
         render_device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
@@ -273,8 +267,16 @@ impl WorldState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
+                cull_mode: if wireframe {
+                    None
+                } else {
+                    Some(wgpu::Face::Back)
+                },
+                polygon_mode: if wireframe {
+                    wgpu::PolygonMode::Line
+                } else {
+                    wgpu::PolygonMode::Fill
+                },
                 clamp_depth: false,
                 conservative: false,
             },
@@ -295,16 +297,16 @@ impl WorldState {
 
     fn create_instances(
         render_device: &wgpu::Device,
-        chunk: &Chunk,
+        world: &World,
     ) -> (
-        Vec<(BlockType, Vec<Instance>)>,
-        AHashMap<BlockType, wgpu::Buffer>,
+        Vec<(BlockType, Vector3<i32>, Vec<Instance>)>,
+        AHashMap<(BlockType, Vector3<i32>), wgpu::Buffer>,
     ) {
-        let instance_lists = chunk.to_instances();
+        let instance_lists = world.to_instances();
 
         let instance_buffers = instance_lists
             .iter()
-            .map(|(block_type, _)| {
+            .map(|(block_type, offset, _)| {
                 let buffer = render_device.create_buffer(&BufferDescriptor {
                     label: Some("instance_buffer"),
                     size: (size_of::<Instance>() * 16 * 16 * 16) as BufferAddress,
@@ -312,7 +314,7 @@ impl WorldState {
                     mapped_at_creation: false,
                 });
 
-                (*block_type, buffer)
+                ((*block_type, *offset), buffer)
             })
             .collect();
 
@@ -322,10 +324,10 @@ impl WorldState {
     pub fn update_chunk(&mut self, render_queue: &wgpu::Queue) {
         let instant = Instant::now();
 
-        self.instance_lists = self.chunk.to_instances();
+        self.instance_lists = self.world.to_instances();
 
-        for (block_type, instance_list) in &self.instance_lists {
-            if let Some(instance_buffer) = self.instance_buffers.get_mut(&block_type) {
+        for (block_type, offset, instance_list) in &self.instance_lists {
+            if let Some(instance_buffer) = self.instance_buffers.get_mut(&(*block_type, *offset)) {
                 render_queue.write_buffer(instance_buffer, 0, bytemuck::cast_slice(&instance_list));
             } else {
                 todo!();
@@ -341,31 +343,8 @@ impl WorldState {
         render_queue: &wgpu::Queue,
         swap_chain_descriptor: &wgpu::SwapChainDescriptor,
     ) -> WorldState {
-        let chunk = Chunk {
-            blocks: [
-                [[Some(Block {
-                    block_type: BlockType::Cobblestone,
-                }); 16]; 16],
-                [[Some(Block {
-                    block_type: BlockType::Dirt,
-                }); 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-                [[None; 16]; 16],
-            ],
-            highlighted: None,
-        };
+        // let chunk = Chunk::generate(0, 0, 0);
+        let world = World::generate();
 
         let (world_texture_layout, texture_bind_groups) =
             Self::create_textures(&render_device, &render_queue);
@@ -392,6 +371,11 @@ impl WorldState {
             contents: bytemuck::cast_slice(cube::VERTICES),
             usage: wgpu::BufferUsage::VERTEX,
         });
+        let grass_vertex_buffer = render_device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("grass vertex buffer"),
+            contents: bytemuck::cast_slice(cube::VERTICES_GRASS),
+            usage: wgpu::BufferUsage::VERTEX,
+        });
 
         let index_buffer = render_device.create_buffer_init(&BufferInitDescriptor {
             label: Some("index_buffer"),
@@ -399,7 +383,7 @@ impl WorldState {
             usage: wgpu::BufferUsage::INDEX,
         });
 
-        let (instance_lists, instance_buffers) = Self::create_instances(&render_device, &chunk);
+        let (instance_lists, instance_buffers) = Self::create_instances(&render_device, &world);
 
         let depth_texture =
             Texture::create_depth_texture(&render_device, &swap_chain_descriptor, "depth_texture");
@@ -414,11 +398,12 @@ impl WorldState {
             projection,
             instance_lists,
             vertex_buffer,
+            vertex_buffer_grass: grass_vertex_buffer,
             index_buffer,
             instance_buffers,
             depth_texture,
             light_bind_group,
-            chunk,
+            world,
         };
 
         world_state.update_chunk(&render_queue);

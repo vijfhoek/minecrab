@@ -362,15 +362,15 @@ impl State {
     }
 
     fn update_aim(&mut self) {
-        let camera = &self.world_state.camera;
-        let chunk = &mut self.world_state.chunk;
-        let position = chunk
-            .raycast(camera.position.to_vec(), camera.direction())
-            .map(|(position, _)| position);
-        if position != chunk.highlighted {
-            chunk.highlighted = position;
-            self.world_state.update_chunk(&self.render_queue);
-        }
+        // let camera = &self.world_state.camera;
+        // let chunk = &mut self.world_state.chunk;
+        // let position = chunk
+        //     .raycast(camera.position.to_vec(), camera.direction())
+        //     .map(|(position, _)| position);
+        // if position != chunk.highlighted {
+        //     chunk.highlighted = position;
+        //     self.world_state.update_chunk(&self.render_queue);
+        // }
     }
 
     fn input_mouse(&mut self, dx: f64, dy: f64) {
@@ -393,25 +393,25 @@ impl State {
             } if self.mouse_grabbed => {
                 let camera = &self.world_state.camera;
 
-                if let Some((pos, axis)) = self
-                    .world_state
-                    .chunk
-                    .raycast(camera.position.to_vec(), camera.direction())
-                {
-                    if *button == 1 {
-                        self.world_state.chunk.blocks[pos.y][pos.z][pos.x].take();
-                        dbg!(&pos);
-                        self.world_state.update_chunk(&self.render_queue);
-                    } else if *button == 3 {
-                        let new_pos = pos.map(|x| x as i32) - axis;
-                        dbg!(&axis, &new_pos);
-                        self.world_state.chunk.blocks[new_pos.y as usize][new_pos.z as usize]
-                            [new_pos.x as usize] = Some(Block {
-                            block_type: BlockType::Cobblestone,
-                        });
-                        self.world_state.update_chunk(&self.render_queue);
-                    }
-                }
+                // if let Some((pos, axis)) = self
+                //     .world_state
+                //     .chunk
+                //     .raycast(camera.position.to_vec(), camera.direction())
+                // {
+                //     if *button == 1 {
+                //         self.world_state.chunk.blocks[pos.y][pos.z][pos.x].take();
+                //         dbg!(&pos);
+                //         self.world_state.update_chunk(&self.render_queue);
+                //     } else if *button == 3 {
+                //         let new_pos = pos.map(|x| x as i32) - axis;
+                //         dbg!(&axis, &new_pos);
+                //         self.world_state.chunk.blocks[new_pos.y as usize][new_pos.z as usize]
+                //             [new_pos.x as usize] = Some(Block {
+                //             block_type: BlockType::Cobblestone,
+                //         });
+                //         self.world_state.update_chunk(&self.render_queue);
+                //     }
+                // }
             }
 
             DeviceEvent::MouseMotion { delta: (dx, dy) } => self.input_mouse(*dx, *dy),
@@ -425,13 +425,13 @@ impl State {
         let (yaw_sin, yaw_cos) = self.world_state.camera.yaw.0.sin_cos();
 
         let forward = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        self.world_state.camera.position += forward * self.forward_speed * 6.0 * dt_secs;
+        self.world_state.camera.position += forward * self.forward_speed * 15.0 * dt_secs;
 
         let right = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        self.world_state.camera.position += right * self.right_speed * 6.0 * dt_secs;
+        self.world_state.camera.position += right * self.right_speed * 15.0 * dt_secs;
 
         let up = cgmath::Vector3::new(0.0, 1.0, 0.0).normalize();
-        self.world_state.camera.position += up * self.up_speed * 6.0 * dt_secs;
+        self.world_state.camera.position += up * self.up_speed * 15.0 * dt_secs;
 
         self.update_aim();
 
@@ -454,6 +454,7 @@ impl State {
                     label: Some("render_encoder"),
                 });
 
+        let mut triangle_count = 0;
         {
             let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("render_pass"),
@@ -462,9 +463,9 @@ impl State {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.05,
-                            g: 0.05,
-                            b: 0.05,
+                            r: 0.502,
+                            g: 0.663,
+                            b: 0.965,
                             a: 1.0,
                         }),
                         store: true,
@@ -485,24 +486,33 @@ impl State {
             render_pass.set_bind_group(1, &self.world_state.uniform_bind_group, &[]);
             render_pass.set_bind_group(2, &self.world_state.light_bind_group, &[]);
 
-            render_pass.set_vertex_buffer(0, self.world_state.vertex_buffer.slice(..));
             render_pass.set_index_buffer(
                 self.world_state.index_buffer.slice(..),
                 wgpu::IndexFormat::Uint16,
             );
 
-            for (block_type, instance_list) in &self.world_state.instance_lists {
-                let instance_buffer = &self.world_state.instance_buffers[block_type];
-
+            for (block_type, offset, instance_list) in &self.world_state.instance_lists {
+                // Set the texture
                 let texture_bind_group = &self.world_state.texture_bind_groups[block_type];
                 render_pass.set_bind_group(0, texture_bind_group, &[]);
 
+                // Set the vertex buffer
+                let vertex_buffer = match block_type {
+                    BlockType::Grass => self.world_state.vertex_buffer_grass.slice(..),
+                    _ => self.world_state.vertex_buffer.slice(..),
+                };
+                render_pass.set_vertex_buffer(0, vertex_buffer);
+
+                // Set the instance buffer
+                let instance_buffer = &self.world_state.instance_buffers[&(*block_type, *offset)];
                 render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+
                 render_pass.draw_indexed(
                     0..cube::INDICES.len() as u32,
                     0,
                     0..instance_list.len() as u32,
                 );
+                triangle_count += cube::INDICES.len() / 3 * instance_list.len();
             }
         }
 
@@ -529,7 +539,10 @@ impl State {
 
             render_pass.set_bind_group(0, &self.ui_texture_bind_group, &[]);
             render_pass.draw_indexed(0..CROSSHAIR_INDICES.len() as u32, 0, 0..1);
+            triangle_count += CROSSHAIR_INDICES.len() / 3;
         }
+
+        // dbg!(triangle_count);
 
         self.render_queue
             .submit(std::iter::once(render_encoder.finish()));

@@ -55,7 +55,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let object_color: vec4<f32> =
         textureSample(texture, sampler_diffuse, in.texture_coordinates);
 
-    let ambient_strength = 0.2;
+    let ambient_strength = 0.1;
     let ambient_color = light.color * ambient_strength;
 
     let light_direction = normalize(light.position - in.world_position);

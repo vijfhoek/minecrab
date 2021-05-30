@@ -81,11 +81,15 @@ fn main() {
             },
             Event::RedrawRequested(_) => {
                 frames += 1;
-                if frames % 1000 == 0 {
-                    let frametime = instant.elapsed() / 1000;
+                if instant.elapsed().as_secs() >= 1 {
+                    let frametime = instant.elapsed() / frames;
                     let fps = 1_000_000 / frametime.as_micros();
-                    println!("{:?} - {} fps", frametime, fps);
+                    println!(
+                        "{} frames | frametime {:?} | fps {}",
+                        frames, frametime, fps
+                    );
                     instant = Instant::now();
+                    frames = 0;
                 }
 
                 let now = Instant::now();

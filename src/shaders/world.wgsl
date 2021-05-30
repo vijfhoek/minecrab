@@ -70,7 +70,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
 
     var result: vec3<f32> = (ambient_color + diffuse_color + specular_color) * object_color.xyz;
     if (in.highlighted != 0) {
-        result = result + 0.5;
+        result = result + 0.3;
     }
 
     return vec4<f32>(result, object_color.a);

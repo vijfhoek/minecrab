@@ -43,7 +43,15 @@ impl Chunk {
         map.drain().collect()
     }
 
-    fn get_block(&self, x: usize, y: usize, z: usize) -> Option<&Block> {
+    pub fn get_mut_block(&mut self, x: usize, y: usize, z: usize) -> Option<&mut Block> {
+        self.blocks
+            .get_mut(y)
+            .and_then(|blocks| blocks.get_mut(z))
+            .and_then(|blocks| blocks.get_mut(x))
+            .and_then(|block| block.as_mut())
+    }
+
+    pub fn get_block(&self, x: usize, y: usize, z: usize) -> Option<&Block> {
         self.blocks
             .get(y)
             .and_then(|blocks| blocks.get(z))
@@ -59,7 +67,11 @@ impl Chunk {
         }
     }
 
-    pub fn raycast(&self, origin: Vector3<f32>, direction: Vector3<f32>) -> Option<Vector3<usize>> {
+    pub fn raycast(
+        &self,
+        origin: Vector3<f32>,
+        direction: Vector3<f32>,
+    ) -> Option<(Vector3<usize>, Vector3<i32>)> {
         let scale = Vector3::new(
             Self::calc_scale(direction, direction.x),
             Self::calc_scale(direction, direction.y),
@@ -89,16 +101,21 @@ impl Chunk {
             },
         };
 
+        let mut face;
+
         while lengths.magnitude() < 100.0 {
             if lengths.x <= lengths.y && lengths.x <= lengths.z {
                 lengths.x += scale.x;
                 position.x += step.x;
+                face = Vector3::unit_x() * step.x;
             } else if lengths.y <= lengths.x && lengths.y <= lengths.z {
                 lengths.y += scale.y;
                 position.y += step.y;
+                face = Vector3::unit_y() * step.y;
             } else if lengths.z <= lengths.x && lengths.z <= lengths.y {
                 lengths.z += scale.z;
                 position.z += step.z;
+                face = Vector3::unit_z() * step.z;
             } else {
                 return None;
             }
@@ -109,7 +126,7 @@ impl Chunk {
                 position.z as usize,
             ) {
                 // Intersection occurred
-                return Some(position.map(|x| x as usize));
+                return Some((position.map(|x| x as usize), face));
             }
         }
 

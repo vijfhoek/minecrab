@@ -1,6 +1,9 @@
-use std::collections::HashMap;
+use std::{mem::size_of, time::Instant};
 
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::{
+    util::{BufferInitDescriptor, DeviceExt},
+    BufferAddress, BufferDescriptor,
+};
 use winit::dpi::PhysicalSize;
 
 use crate::{
@@ -300,15 +303,15 @@ impl WorldState {
 
         let instance_buffers = instance_lists
             .iter()
-            .map(|(block_type, instance_list)| {
-                (
-                    *block_type,
-                    render_device.create_buffer_init(&BufferInitDescriptor {
+            .map(|(block_type, _)| {
+                let buffer = render_device.create_buffer(&BufferDescriptor {
                         label: Some("instance_buffer"),
-                        contents: bytemuck::cast_slice(&instance_list),
+                    size: (size_of::<Instance>() * 16 * 16 * 16) as BufferAddress,
                         usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
-                    }),
-                )
+                    mapped_at_creation: false,
+                });
+
+                (*block_type, buffer)
             })
             .collect();
 
@@ -316,20 +319,25 @@ impl WorldState {
     }
 
     pub fn update_chunk(&mut self, render_queue: &wgpu::Queue) {
-        let instance_lists = self.chunk.to_instances();
+        let instant = Instant::now();
 
-        for (block_type, instance_list) in instance_lists {
+        self.instance_lists = self.chunk.to_instances();
+
+        for (block_type, instance_list) in &self.instance_lists {
             if let Some(instance_buffer) = self.instance_buffers.get_mut(&block_type) {
                 render_queue.write_buffer(instance_buffer, 0, bytemuck::cast_slice(&instance_list));
             } else {
                 todo!();
             }
         }
+
+        let elapsed = instant.elapsed();
+        println!("Chunk update took {:?}", elapsed);
     }
 
     pub fn new(
         render_device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        render_queue: &wgpu::Queue,
         swap_chain_descriptor: &wgpu::SwapChainDescriptor,
     ) -> WorldState {
         let chunk = Chunk {
@@ -359,7 +367,7 @@ impl WorldState {
         };
 
         let (world_texture_layout, texture_bind_groups) =
-            Self::create_textures(&render_device, &queue);
+            Self::create_textures(&render_device, &render_queue);
 
         let (camera, projection) = Self::create_camera(&swap_chain_descriptor);
 
@@ -395,7 +403,7 @@ impl WorldState {
         let depth_texture =
             Texture::create_depth_texture(&render_device, &swap_chain_descriptor, "depth_texture");
 
-        WorldState {
+        let mut world_state = Self {
             render_pipeline,
             uniforms,
             uniform_buffer,
@@ -410,7 +418,11 @@ impl WorldState {
             depth_texture,
             light_bind_group,
             chunk,
-        }
+        };
+
+        world_state.update_chunk(&render_queue);
+
+        world_state
     }
 
     pub fn resize(

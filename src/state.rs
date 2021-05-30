@@ -7,7 +7,13 @@ use winit::{
     window::Window,
 };
 
-use crate::{cube, texture::Texture, vertex::Vertex, world_state::WorldState};
+use crate::{
+    chunk::{Block, BlockType},
+    cube,
+    texture::Texture,
+    vertex::Vertex,
+    world_state::WorldState,
+};
 
 const UI_SCALE_X: f32 = 0.0045;
 const UI_SCALE_Y: f32 = 0.008;
@@ -358,10 +364,11 @@ impl State {
     fn update_aim(&mut self) {
         let camera = &self.world_state.camera;
         let chunk = &mut self.world_state.chunk;
-
-        let coords = chunk.raycast(camera.position.to_vec(), camera.direction());
-        if coords != chunk.highlighted {
-            chunk.highlighted = coords;
+        let position = chunk
+            .raycast(camera.position.to_vec(), camera.direction())
+            .map(|(position, _)| position);
+        if position != chunk.highlighted {
+            chunk.highlighted = position;
             self.world_state.update_chunk(&self.render_queue);
         }
     }
@@ -369,7 +376,6 @@ impl State {
     fn input_mouse(&mut self, dx: f64, dy: f64) {
         if self.mouse_grabbed {
             self.update_camera(dx, dy);
-            self.update_aim();
         }
     }
 
@@ -380,6 +386,34 @@ impl State {
                 state,
                 ..
             }) => self.input_keyboard(key, state),
+
+            DeviceEvent::Button {
+                button,
+                state: ElementState::Pressed,
+            } if self.mouse_grabbed => {
+                let camera = &self.world_state.camera;
+
+                if let Some((pos, axis)) = self
+                    .world_state
+                    .chunk
+                    .raycast(camera.position.to_vec(), camera.direction())
+                {
+                    if *button == 1 {
+                        self.world_state.chunk.blocks[pos.y][pos.z][pos.x].take();
+                        dbg!(&pos);
+                        self.world_state.update_chunk(&self.render_queue);
+                    } else if *button == 3 {
+                        let new_pos = pos.map(|x| x as i32) - axis;
+                        dbg!(&axis, &new_pos);
+                        self.world_state.chunk.blocks[new_pos.y as usize][new_pos.z as usize]
+                            [new_pos.x as usize] = Some(Block {
+                            block_type: BlockType::Cobblestone,
+                        });
+                        self.world_state.update_chunk(&self.render_queue);
+                    }
+                }
+            }
+
             DeviceEvent::MouseMotion { delta: (dx, dy) } => self.input_mouse(*dx, *dy),
             _ => (),
         }
@@ -388,7 +422,6 @@ impl State {
     pub fn update(&mut self, dt: Duration) {
         let dt_secs = dt.as_secs_f32();
 
-        // Move forward/backward and left/right
         let (yaw_sin, yaw_cos) = self.world_state.camera.yaw.0.sin_cos();
 
         let forward = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
@@ -399,6 +432,8 @@ impl State {
 
         let up = cgmath::Vector3::new(0.0, 1.0, 0.0).normalize();
         self.world_state.camera.position += up * self.up_speed * 6.0 * dt_secs;
+
+        self.update_aim();
 
         self.world_state
             .uniforms
@@ -426,7 +461,12 @@ impl State {
                     view: &frame.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLUE),
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.05,
+                            g: 0.05,
+                            b: 0.05,
+                            a: 1.0,
+                        }),
                         store: true,
                     },
                 }],

@@ -29,21 +29,31 @@ impl Chunk {
     pub fn generate(chunk_x: i32, chunk_y: i32, chunk_z: i32) -> Self {
         let fbm = noise::Fbm::new();
 
+        const TERRAIN_NOISE_SCALE: f64 = 0.1;
+        const TERRAIN_NOISE_OFFSET: f64 = 0.0;
         let terrain_noise = PlaneMapBuilder::new(&fbm)
-            .set_size(16, 16)
-            .set_x_bounds(chunk_x as f64 * 0.1, chunk_x as f64 * 0.1 + 0.1)
-            .set_y_bounds(chunk_z as f64 * 0.1, chunk_z as f64 * 0.1 + 0.1)
-            .build();
-
-        let stone_noise = PlaneMapBuilder::new(&fbm)
-            .set_size(16, 16)
+            .set_size(CHUNK_SIZE, CHUNK_SIZE)
             .set_x_bounds(
-                chunk_x as f64 * 0.07 + 11239.0,
-                chunk_x as f64 * 0.07 + 11239.07,
+                chunk_x as f64 * TERRAIN_NOISE_SCALE + TERRAIN_NOISE_OFFSET,
+                chunk_x as f64 * TERRAIN_NOISE_SCALE * 2.0 + TERRAIN_NOISE_OFFSET,
             )
             .set_y_bounds(
-                chunk_y as f64 * 0.07 + 11239.0,
-                chunk_y as f64 * 0.07 + 11239.07,
+                chunk_z as f64 * TERRAIN_NOISE_SCALE + TERRAIN_NOISE_OFFSET,
+                chunk_z as f64 * TERRAIN_NOISE_SCALE * 2.0 + TERRAIN_NOISE_OFFSET,
+            )
+            .build();
+
+        const STONE_NOISE_SCALE: f64 = 0.07;
+        const STONE_NOISE_OFFSET: f64 = 11239.0;
+        let stone_noise = PlaneMapBuilder::new(&fbm)
+            .set_size(CHUNK_SIZE, CHUNK_SIZE)
+            .set_x_bounds(
+                chunk_x as f64 * STONE_NOISE_SCALE + STONE_NOISE_OFFSET,
+                chunk_x as f64 * STONE_NOISE_SCALE * 2.0 + STONE_NOISE_OFFSET,
+            )
+            .set_y_bounds(
+                chunk_y as f64 * STONE_NOISE_SCALE + STONE_NOISE_OFFSET,
+                chunk_y as f64 * STONE_NOISE_SCALE * 2.0 + STONE_NOISE_OFFSET,
             )
             .build();
 

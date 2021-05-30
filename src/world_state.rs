@@ -108,7 +108,7 @@ impl WorldState {
 
     fn create_camera(swap_chain_descriptor: &wgpu::SwapChainDescriptor) -> (Camera, Projection) {
         let camera = Camera::new(
-            (0.0, 5.0, 10.0).into(),
+            (0.0, 80.0, 0.0).into(),
             cgmath::Deg(0.0).into(),
             cgmath::Deg(-20.0).into(),
         );

@@ -60,31 +60,29 @@ impl Chunk {
     }
 
     pub fn raycast(&self, origin: Vector3<f32>, direction: Vector3<f32>) -> Option<Vector3<usize>> {
-        let origin = origin.map(|field| field.trunc());
-        let dir = direction.normalize();
-
         let scale = Vector3::new(
             Self::calc_scale(direction, direction.x),
             Self::calc_scale(direction, direction.y),
             Self::calc_scale(direction, direction.z),
         );
+        let direction = direction.normalize();
 
         let mut position = origin.map(|x| x as i32);
-        let step: Vector3<i32> = dir.map(|x| x.signum() as i32);
+        let step = direction.map(|x| x.signum() as i32);
 
         // Truncate the origin
         let mut lengths = Vector3 {
-            x: if dir.x < 0.0 {
+            x: if direction.x < 0.0 {
                 (origin.x - position.x as f32) * scale.x
             } else {
                 (position.x as f32 + 1.0 - origin.x) * scale.x
             },
-            y: if dir.y < 0.0 {
+            y: if direction.y < 0.0 {
                 (origin.y - position.y as f32) * scale.y
             } else {
                 (position.y as f32 + 1.0 - origin.y) * scale.y
             },
-            z: if dir.z < 0.0 {
+            z: if direction.z < 0.0 {
                 (origin.z - position.z as f32) * scale.z
             } else {
                 (position.z as f32 + 1.0 - origin.z) * scale.z
@@ -105,14 +103,12 @@ impl Chunk {
                 return None;
             }
 
-            let block = self.get_block(
+            if let Some(_) = self.get_block(
                 position.x as usize,
                 position.y as usize,
                 position.z as usize,
-            );
-
-            if let Some(_) = block {
-                // Intersected with a block, round position to coordinates and return it.
+            ) {
+                // Intersection occurred
                 return Some(position.map(|x| x as usize));
             }
         }

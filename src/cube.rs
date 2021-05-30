@@ -3,40 +3,40 @@ use crate::vertex::Vertex;
 #[rustfmt::skip]
 pub const VERTICES: &[Vertex] = &[
     // Left
-    Vertex { position: [-0.5, -0.5, -0.5], texture_coordinates: [1.0, 1.0], normal: [-1.0,  0.0,  0.0] },
-    Vertex { position: [-0.5, -0.5,  0.5], texture_coordinates: [0.0, 1.0], normal: [-1.0,  0.0,  0.0] },
-    Vertex { position: [-0.5,  0.5,  0.5], texture_coordinates: [0.0, 0.0], normal: [-1.0,  0.0,  0.0] },
-    Vertex { position: [-0.5,  0.5, -0.5], texture_coordinates: [1.0, 0.0], normal: [-1.0,  0.0,  0.0] },
+    Vertex { position: [0.0, 0.0, 0.0], texture_coordinates: [1.0, 1.0], normal: [-1.0,  0.0,  0.0] },
+    Vertex { position: [0.0, 0.0, 1.0], texture_coordinates: [0.0, 1.0], normal: [-1.0,  0.0,  0.0] },
+    Vertex { position: [0.0, 1.0, 1.0], texture_coordinates: [0.0, 0.0], normal: [-1.0,  0.0,  0.0] },
+    Vertex { position: [0.0, 1.0, 0.0], texture_coordinates: [1.0, 0.0], normal: [-1.0,  0.0,  0.0] },
 
     // Right
-    Vertex { position: [ 0.5, -0.5, -0.5], texture_coordinates: [0.0, 1.0], normal: [ 1.0,  0.0,  0.0] },
-    Vertex { position: [ 0.5, -0.5,  0.5], texture_coordinates: [1.0, 1.0], normal: [ 1.0,  0.0,  0.0] },
-    Vertex { position: [ 0.5,  0.5,  0.5], texture_coordinates: [1.0, 0.0], normal: [ 1.0,  0.0,  0.0] },
-    Vertex { position: [ 0.5,  0.5, -0.5], texture_coordinates: [0.0, 0.0], normal: [ 1.0,  0.0,  0.0] },
+    Vertex { position: [1.0, 0.0, 0.0], texture_coordinates: [0.0, 1.0], normal: [ 1.0,  0.0,  0.0] },
+    Vertex { position: [1.0, 0.0, 1.0], texture_coordinates: [1.0, 1.0], normal: [ 1.0,  0.0,  0.0] },
+    Vertex { position: [1.0, 1.0, 1.0], texture_coordinates: [1.0, 0.0], normal: [ 1.0,  0.0,  0.0] },
+    Vertex { position: [1.0, 1.0, 0.0], texture_coordinates: [0.0, 0.0], normal: [ 1.0,  0.0,  0.0] },
 
     // Back
-    Vertex { position: [-0.5, -0.5, -0.5], texture_coordinates: [1.0, 1.0], normal: [ 0.0,  0.0, -1.0] },
-    Vertex { position: [-0.5,  0.5, -0.5], texture_coordinates: [1.0, 0.0], normal: [ 0.0,  0.0, -1.0] },
-    Vertex { position: [ 0.5,  0.5, -0.5], texture_coordinates: [0.0, 0.0], normal: [ 0.0,  0.0, -1.0] },
-    Vertex { position: [ 0.5, -0.5, -0.5], texture_coordinates: [0.0, 1.0], normal: [ 0.0,  0.0, -1.0] },
+    Vertex { position: [0.0, 0.0, 0.0], texture_coordinates: [1.0, 1.0], normal: [ 0.0,  0.0, -1.0] },
+    Vertex { position: [0.0, 1.0, 0.0], texture_coordinates: [1.0, 0.0], normal: [ 0.0,  0.0, -1.0] },
+    Vertex { position: [1.0, 1.0, 0.0], texture_coordinates: [0.0, 0.0], normal: [ 0.0,  0.0, -1.0] },
+    Vertex { position: [1.0, 0.0, 0.0], texture_coordinates: [0.0, 1.0], normal: [ 0.0,  0.0, -1.0] },
 
     // Front
-    Vertex { position: [-0.5, -0.5,  0.5], texture_coordinates: [0.0, 1.0], normal: [ 0.0,  0.0,  1.0] },
-    Vertex { position: [-0.5,  0.5,  0.5], texture_coordinates: [0.0, 0.0], normal: [ 0.0,  0.0,  1.0] },
-    Vertex { position: [ 0.5,  0.5,  0.5], texture_coordinates: [1.0, 0.0], normal: [ 0.0,  0.0,  1.0] },
-    Vertex { position: [ 0.5, -0.5,  0.5], texture_coordinates: [1.0, 1.0], normal: [ 0.0,  0.0,  1.0] },
+    Vertex { position: [0.0, 0.0, 1.0], texture_coordinates: [0.0, 1.0], normal: [ 0.0,  0.0,  1.0] },
+    Vertex { position: [0.0, 1.0, 1.0], texture_coordinates: [0.0, 0.0], normal: [ 0.0,  0.0,  1.0] },
+    Vertex { position: [1.0, 1.0, 1.0], texture_coordinates: [1.0, 0.0], normal: [ 0.0,  0.0,  1.0] },
+    Vertex { position: [1.0, 0.0, 1.0], texture_coordinates: [1.0, 1.0], normal: [ 0.0,  0.0,  1.0] },
 
     // Bottom
-    Vertex { position: [-0.5, -0.5, -0.5], texture_coordinates: [1.0, 0.0], normal: [ 0.0, -1.0,  0.0] },
-    Vertex { position: [-0.5, -0.5,  0.5], texture_coordinates: [1.0, 1.0], normal: [ 0.0, -1.0,  0.0] },
-    Vertex { position: [ 0.5, -0.5,  0.5], texture_coordinates: [0.0, 1.0], normal: [ 0.0, -1.0,  0.0] },
-    Vertex { position: [ 0.5, -0.5, -0.5], texture_coordinates: [0.0, 0.0], normal: [ 0.0, -1.0,  0.0] },
+    Vertex { position: [0.0, 0.0, 0.0], texture_coordinates: [1.0, 0.0], normal: [ 0.0, -1.0,  0.0] },
+    Vertex { position: [0.0, 0.0, 1.0], texture_coordinates: [1.0, 1.0], normal: [ 0.0, -1.0,  0.0] },
+    Vertex { position: [1.0, 0.0, 1.0], texture_coordinates: [0.0, 1.0], normal: [ 0.0, -1.0,  0.0] },
+    Vertex { position: [1.0, 0.0, 0.0], texture_coordinates: [0.0, 0.0], normal: [ 0.0, -1.0,  0.0] },
 
     // Top
-    Vertex { position: [-0.5,  0.5, -0.5], texture_coordinates: [0.0, 0.0], normal: [ 0.0,  1.0,  0.0] },
-    Vertex { position: [-0.5,  0.5,  0.5], texture_coordinates: [0.0, 1.0], normal: [ 0.0,  1.0,  0.0] },
-    Vertex { position: [ 0.5,  0.5,  0.5], texture_coordinates: [1.0, 1.0], normal: [ 0.0,  1.0,  0.0] },
-    Vertex { position: [ 0.5,  0.5, -0.5], texture_coordinates: [1.0, 0.0], normal: [ 0.0,  1.0,  0.0] },
+    Vertex { position: [0.0, 1.0, 0.0], texture_coordinates: [0.0, 0.0], normal: [ 0.0,  1.0,  0.0] },
+    Vertex { position: [0.0, 1.0, 1.0], texture_coordinates: [0.0, 1.0], normal: [ 0.0,  1.0,  0.0] },
+    Vertex { position: [1.0, 1.0, 1.0], texture_coordinates: [1.0, 1.0], normal: [ 0.0,  1.0,  0.0] },
+    Vertex { position: [1.0, 1.0, 0.0], texture_coordinates: [1.0, 0.0], normal: [ 0.0,  1.0,  0.0] },
 ];
 
 #[rustfmt::skip]

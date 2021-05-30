@@ -1,5 +1,6 @@
 use std::{mem::size_of, time::Instant};
 
+use ahash::AHashMap;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BufferAddress, BufferDescriptor,
@@ -22,13 +23,13 @@ pub struct WorldState {
     pub uniforms: Uniforms,
     pub uniform_buffer: wgpu::Buffer,
     pub uniform_bind_group: wgpu::BindGroup,
-    pub texture_bind_groups: HashMap<BlockType, wgpu::BindGroup>,
+    pub texture_bind_groups: AHashMap<BlockType, wgpu::BindGroup>,
     pub camera: Camera,
     pub projection: Projection,
     pub instance_lists: Vec<(BlockType, Vec<Instance>)>,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
-    pub instance_buffers: HashMap<BlockType, wgpu::Buffer>,
+    pub instance_buffers: AHashMap<BlockType, wgpu::Buffer>,
     pub depth_texture: Texture,
     pub light_bind_group: wgpu::BindGroup,
     pub chunk: Chunk,
@@ -38,7 +39,7 @@ impl WorldState {
     fn create_textures(
         render_device: &wgpu::Device,
         render_queue: &wgpu::Queue,
-    ) -> (wgpu::BindGroupLayout, HashMap<BlockType, wgpu::BindGroup>) {
+    ) -> (wgpu::BindGroupLayout, AHashMap<BlockType, wgpu::BindGroup>) {
         let dirt_texture = Texture::from_bytes(
             render_device,
             render_queue,
@@ -83,7 +84,7 @@ impl WorldState {
                 ],
             });
 
-        let bind_groups: HashMap<BlockType, wgpu::BindGroup> = [
+        let bind_groups: AHashMap<BlockType, wgpu::BindGroup> = [
             (BlockType::Dirt, dirt_texture),
             (BlockType::Cobblestone, cobblestone_texture),
         ]
@@ -297,7 +298,7 @@ impl WorldState {
         chunk: &Chunk,
     ) -> (
         Vec<(BlockType, Vec<Instance>)>,
-        HashMap<BlockType, wgpu::Buffer>,
+        AHashMap<BlockType, wgpu::Buffer>,
     ) {
         let instance_lists = chunk.to_instances();
 
@@ -305,9 +306,9 @@ impl WorldState {
             .iter()
             .map(|(block_type, _)| {
                 let buffer = render_device.create_buffer(&BufferDescriptor {
-                        label: Some("instance_buffer"),
+                    label: Some("instance_buffer"),
                     size: (size_of::<Instance>() * 16 * 16 * 16) as BufferAddress,
-                        usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
+                    usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
                     mapped_at_creation: false,
                 });
 

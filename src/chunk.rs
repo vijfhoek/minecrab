@@ -1,6 +1,6 @@
 use crate::instance::Instance;
+use ahash::AHashMap;
 use cgmath::{InnerSpace, Vector3};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BlockType {
@@ -22,7 +22,7 @@ pub struct Chunk {
 
 impl Chunk {
     pub fn to_instances(&self) -> Vec<(BlockType, Vec<Instance>)> {
-        let mut map: HashMap<BlockType, Vec<Instance>> = HashMap::new();
+        let mut map: AHashMap<BlockType, Vec<Instance>> = AHashMap::new();
 
         for (y, y_blocks) in self.blocks.iter().enumerate() {
             for (z, z_blocks) in y_blocks.iter().enumerate() {

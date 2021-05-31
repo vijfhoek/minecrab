@@ -207,7 +207,7 @@ impl State {
     async fn create_render_device(
         window: &Window,
     ) -> (wgpu::Surface, wgpu::Adapter, wgpu::Device, wgpu::Queue) {
-        let instance = wgpu::Instance::new(wgpu::BackendBit::all());
+        let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
         let render_surface = unsafe { instance.create_surface(window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -223,10 +223,7 @@ impl State {
                     label: Some("render_device"),
                     features: wgpu::Features::NON_FILL_POLYGON_MODE
                         | wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY,
-                    limits: wgpu::Limits {
-                        max_push_constant_size: 4,
-                        ..wgpu::Limits::default()
-                    },
+                    limits: wgpu::Limits::default(),
                 },
                 None,
             )

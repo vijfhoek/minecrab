@@ -25,7 +25,7 @@ impl Vertex {
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 wgpu::VertexAttribute {
-                    offset: 20,
+                    offset: 24,
                     shader_location: 2,
                     format: wgpu::VertexFormat::Float32x3,
                 },

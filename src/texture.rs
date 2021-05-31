@@ -111,7 +111,7 @@ impl Texture {
     }
 }
 
-pub const TEXTURE_COUNT: usize = 8;
+pub const TEXTURE_COUNT: usize = 72;
 
 pub struct TextureManager {
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -174,6 +174,10 @@ impl TextureManager {
         self.load(device, queue, "assets/block/bedrock.png")?; // 5
         self.load(device, queue, "assets/block/sand.png")?; // 6
         self.load(device, queue, "assets/block/gravel.png")?; // 7
+        for i in 0..64 {
+            let path = format!("assets/water_still_plains/frame-{}.png", i);
+            self.load(device, queue, &path)?; // 8 - 71
+        }
         assert_eq!(TEXTURE_COUNT, self.textures.len());
 
         let texture_array = device.create_texture(&wgpu::TextureDescriptor {

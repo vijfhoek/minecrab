@@ -6,11 +6,13 @@ use crate::{quad::Quad, vertex::Vertex};
 pub fn vertices(
     quad: &Quad,
     y: i32,
+    z_height: f32,
     offset: Vector3<i32>,
     texture_indices: (usize, usize, usize, usize, usize, usize),
 ) -> [Vertex; 24] {
     let w = quad.w as f32;
     let h = quad.h as f32;
+    let zh = z_height;
 
     let x = (quad.x + offset.x) as f32;
     let y = (y + offset.y) as f32;
@@ -21,40 +23,40 @@ pub fn vertices(
     #[rustfmt::skip]
     let vertices = [
         // Left
-        Vertex { position: [x,     y,       z      ], texture_coordinates: [h,   1.0, t.0 as f32], normal: [-1.0, 0.0, 0.0] },
-        Vertex { position: [x,     y,       z + h  ], texture_coordinates: [0.0, 1.0, t.0 as f32], normal: [-1.0, 0.0, 0.0] },
-        Vertex { position: [x,     y + 1.0, z + h  ], texture_coordinates: [0.0, 0.0, t.0 as f32], normal: [-1.0, 0.0, 0.0] },
-        Vertex { position: [x,     y + 1.0, z      ], texture_coordinates: [h,   0.0, t.0 as f32], normal: [-1.0, 0.0, 0.0] },
+        Vertex { position: [x,     y,      z      ], texture_coordinates: [h,   1.0, t.0 as f32], normal: [-1.0, 0.0, 0.0] },
+        Vertex { position: [x,     y,      z + h  ], texture_coordinates: [0.0, 1.0, t.0 as f32], normal: [-1.0, 0.0, 0.0] },
+        Vertex { position: [x,     y + zh, z + h  ], texture_coordinates: [0.0, 0.0, t.0 as f32], normal: [-1.0, 0.0, 0.0] },
+        Vertex { position: [x,     y + zh, z      ], texture_coordinates: [h,   0.0, t.0 as f32], normal: [-1.0, 0.0, 0.0] },
 
         // Right
-        Vertex { position: [x + w, y,       z      ], texture_coordinates: [0.0, 1.0, t.1 as f32], normal: [1.0, 0.0, 0.0] },
-        Vertex { position: [x + w, y,       z + h  ], texture_coordinates: [h,   1.0, t.1 as f32], normal: [1.0, 0.0, 0.0] },
-        Vertex { position: [x + w, y + 1.0, z + h  ], texture_coordinates: [h,   0.0, t.1 as f32], normal: [1.0, 0.0, 0.0] },
-        Vertex { position: [x + w, y + 1.0, z      ], texture_coordinates: [0.0, 0.0, t.1 as f32], normal: [1.0, 0.0, 0.0] },
+        Vertex { position: [x + w, y,      z      ], texture_coordinates: [0.0, 1.0, t.1 as f32], normal: [1.0, 0.0, 0.0] },
+        Vertex { position: [x + w, y,      z + h  ], texture_coordinates: [h,   1.0, t.1 as f32], normal: [1.0, 0.0, 0.0] },
+        Vertex { position: [x + w, y + zh, z + h  ], texture_coordinates: [h,   0.0, t.1 as f32], normal: [1.0, 0.0, 0.0] },
+        Vertex { position: [x + w, y + zh, z      ], texture_coordinates: [0.0, 0.0, t.1 as f32], normal: [1.0, 0.0, 0.0] },
 
         // Back
-        Vertex { position: [x,     y,       z      ], texture_coordinates: [w,   1.0, t.2 as f32], normal: [0.0, 0.0, -1.0] },
-        Vertex { position: [x,     y + 1.0, z      ], texture_coordinates: [w,   0.0, t.2 as f32], normal: [0.0, 0.0, -1.0] },
-        Vertex { position: [x + w, y + 1.0, z      ], texture_coordinates: [0.0, 0.0, t.2 as f32], normal: [0.0, 0.0, -1.0] },
-        Vertex { position: [x + w, y,       z      ], texture_coordinates: [0.0, 1.0, t.2 as f32], normal: [0.0, 0.0, -1.0] },
+        Vertex { position: [x,     y,      z      ], texture_coordinates: [w,   1.0, t.2 as f32], normal: [0.0, 0.0, -1.0] },
+        Vertex { position: [x,     y + zh, z      ], texture_coordinates: [w,   0.0, t.2 as f32], normal: [0.0, 0.0, -1.0] },
+        Vertex { position: [x + w, y + zh, z      ], texture_coordinates: [0.0, 0.0, t.2 as f32], normal: [0.0, 0.0, -1.0] },
+        Vertex { position: [x + w, y,      z      ], texture_coordinates: [0.0, 1.0, t.2 as f32], normal: [0.0, 0.0, -1.0] },
 
         // Front
-        Vertex { position: [x,     y,       z + h  ], texture_coordinates: [0.0, 1.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
-        Vertex { position: [x,     y + 1.0, z + h  ], texture_coordinates: [0.0, 0.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
-        Vertex { position: [x + w, y + 1.0, z + h  ], texture_coordinates: [w,   0.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
-        Vertex { position: [x + w, y,       z + h  ], texture_coordinates: [w,   1.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [x,     y,      z + h  ], texture_coordinates: [0.0, 1.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [x,     y + zh, z + h  ], texture_coordinates: [0.0, 0.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [x + w, y + zh, z + h  ], texture_coordinates: [w,   0.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [x + w, y,      z + h  ], texture_coordinates: [w,   1.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
 
         // Bottom
-        Vertex { position: [x,     y,       z + 0.0], texture_coordinates: [w,   0.0, t.4 as f32], normal: [0.0, -1.0, 0.0] },
-        Vertex { position: [x,     y,       z + h  ], texture_coordinates: [w,   h,   t.4 as f32], normal: [0.0, -1.0, 0.0] },
-        Vertex { position: [x + w, y,       z + h  ], texture_coordinates: [0.0, h,   t.4 as f32], normal: [0.0, -1.0, 0.0] },
-        Vertex { position: [x + w, y,       z      ], texture_coordinates: [0.0, 0.0, t.4 as f32], normal: [0.0, -1.0, 0.0] },
+        Vertex { position: [x,     y,      z + 0.0], texture_coordinates: [w,   0.0, t.4 as f32], normal: [0.0, -1.0, 0.0] },
+        Vertex { position: [x,     y,      z + h  ], texture_coordinates: [w,   h,   t.4 as f32], normal: [0.0, -1.0, 0.0] },
+        Vertex { position: [x + w, y,      z + h  ], texture_coordinates: [0.0, h,   t.4 as f32], normal: [0.0, -1.0, 0.0] },
+        Vertex { position: [x + w, y,      z      ], texture_coordinates: [0.0, 0.0, t.4 as f32], normal: [0.0, -1.0, 0.0] },
 
         // Top
-        Vertex { position: [x,     y + 1.0, z      ], texture_coordinates: [0.0, 0.0, t.5 as f32], normal: [0.0, 1.0, 0.0] },
-        Vertex { position: [x,     y + 1.0, z + h  ], texture_coordinates: [0.0, h,   t.5 as f32], normal: [0.0, 1.0, 0.0] },
-        Vertex { position: [x + w, y + 1.0, z + h  ], texture_coordinates: [w,   h,   t.5 as f32], normal: [0.0, 1.0, 0.0] },
-        Vertex { position: [x + w, y + 1.0, z      ], texture_coordinates: [w,   0.0, t.5 as f32], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [x,     y + zh, z      ], texture_coordinates: [0.0, 0.0, t.5 as f32], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [x,     y + zh, z + h  ], texture_coordinates: [0.0, h,   t.5 as f32], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [x + w, y + zh, z + h  ], texture_coordinates: [w,   h,   t.5 as f32], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [x + w, y + zh, z      ], texture_coordinates: [w,   0.0, t.5 as f32], normal: [0.0, 1.0, 0.0] },
     ];
     vertices
 }

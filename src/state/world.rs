@@ -1,13 +1,12 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use cgmath::Vector3;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use winit::dpi::PhysicalSize;
 
 use crate::{
     camera::{Camera, Projection},
-    light::Light,
     texture::{Texture, TextureManager},
+    time::Time,
     uniforms::Uniforms,
     vertex::Vertex,
     world::World,
@@ -22,10 +21,12 @@ pub struct WorldState {
     pub camera: Camera,
     pub projection: Projection,
     pub depth_texture: Texture,
-    pub light_bind_group: wgpu::BindGroup,
+    pub time_bind_group: wgpu::BindGroup,
     pub world: World,
 
     pub chunk_buffers: Vec<(wgpu::Buffer, wgpu::Buffer, usize)>,
+    time: Time,
+    time_buffer: wgpu::Buffer,
 }
 
 impl WorldState {
@@ -39,8 +40,8 @@ impl WorldState {
 
     fn create_camera(swap_chain_descriptor: &wgpu::SwapChainDescriptor) -> (Camera, Projection) {
         let camera = Camera::new(
-            (0.0, 80.0, 0.0).into(),
-            cgmath::Deg(0.0).into(),
+            (-10.0, 140.0, -10.0).into(),
+            cgmath::Deg(45.0).into(),
             cgmath::Deg(-20.0).into(),
         );
 
@@ -106,21 +107,18 @@ impl WorldState {
         )
     }
 
-    fn create_light(
+    fn create_time(
         render_device: &wgpu::Device,
-    ) -> (Light, wgpu::Buffer, wgpu::BindGroupLayout, wgpu::BindGroup) {
-        let light = Light::new(
-            Vector3::new(256.0, 500.0, 200.0),
-            Vector3::new(1.0, 1.0, 1.0),
-        );
+    ) -> (Time, wgpu::Buffer, wgpu::BindGroupLayout, wgpu::BindGroup) {
+        let time = Time::new();
 
-        let light_buffer = render_device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("light_buffer"),
-            contents: bytemuck::cast_slice(&[light]),
+        let buffer = render_device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("time_buffer"),
+            contents: bytemuck::cast_slice(&[time]),
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
         });
 
-        let light_bind_group_layout =
+        let bind_group_layout =
             render_device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -132,24 +130,19 @@ impl WorldState {
                     },
                     count: None,
                 }],
-                label: Some("light_bind_group_layout"),
+                label: Some("time_bind_group_layout"),
             });
 
-        let light_bind_group = render_device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &light_bind_group_layout,
+        let bind_group = render_device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: light_buffer.as_entire_binding(),
+                resource: buffer.as_entire_binding(),
             }],
-            label: Some("light_bind_group"),
+            label: Some("time_bind_group"),
         });
 
-        (
-            light,
-            light_buffer,
-            light_bind_group_layout,
-            light_bind_group,
-        )
+        (time, buffer, bind_group_layout, bind_group)
     }
 
     fn create_render_pipeline(
@@ -253,7 +246,7 @@ impl WorldState {
         let (uniforms, uniform_buffer, world_uniform_layout, uniform_bind_group) =
             Self::create_uniforms(&camera, &projection, render_device);
 
-        let (_, _, world_light_layout, light_bind_group) = Self::create_light(&render_device);
+        let (time, time_buffer, time_layout, time_bind_group) = Self::create_time(&render_device);
 
         let render_pipeline = Self::create_render_pipeline(
             &render_device,
@@ -261,7 +254,7 @@ impl WorldState {
             &[
                 &texture_manager.bind_group_layout,
                 &world_uniform_layout,
-                &world_light_layout,
+                &time_layout,
             ],
         );
 
@@ -277,7 +270,11 @@ impl WorldState {
             camera,
             projection,
             depth_texture,
-            light_bind_group,
+
+            time,
+            time_buffer,
+            time_bind_group,
+
             world,
             chunk_buffers: Vec::new(),
         };
@@ -285,6 +282,11 @@ impl WorldState {
         world_state.update_chunk(render_device);
 
         world_state
+    }
+
+    pub fn update(&mut self, dt: Duration, render_queue: &wgpu::Queue) {
+        self.time.time += dt.as_secs_f32();
+        render_queue.write_buffer(&self.time_buffer, 0, &bytemuck::cast_slice(&[self.time]));
     }
 
     pub fn resize(

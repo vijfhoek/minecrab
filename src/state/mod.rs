@@ -3,7 +3,7 @@ mod world;
 
 use std::time::Duration;
 
-use cgmath::{InnerSpace, Rad};
+use cgmath::{InnerSpace, Rad, Vector3};
 use winit::{
     event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
     window::Window,
@@ -219,20 +219,23 @@ impl State {
 
         let (yaw_sin, yaw_cos) = self.world_state.camera.yaw.0.sin_cos();
 
-        let forward = cgmath::Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
+        let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
         self.world_state.camera.position += forward * self.forward_speed * 15.0 * dt_secs;
 
-        let right = cgmath::Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
+        let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
         self.world_state.camera.position += right * self.right_speed * 15.0 * dt_secs;
 
-        let up = cgmath::Vector3::new(0.0, 1.0, 0.0).normalize();
+        let up = Vector3::new(0.0, 1.0, 0.0).normalize();
         self.world_state.camera.position += up * self.up_speed * 15.0 * dt_secs;
+
+        self.world_state.update(dt, &self.render_queue);
 
         self.update_aim();
 
         self.world_state
             .uniforms
             .update_view_projection(&self.world_state.camera, &self.world_state.projection);
+
         self.render_queue.write_buffer(
             &self.world_state.uniform_buffer,
             0,
@@ -280,7 +283,7 @@ impl State {
             let tm = &self.world_state.texture_manager;
             render_pass.set_bind_group(0, tm.bind_group.as_ref().unwrap(), &[]);
             render_pass.set_bind_group(1, &self.world_state.uniform_bind_group, &[]);
-            render_pass.set_bind_group(2, &self.world_state.light_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.world_state.time_bind_group, &[]);
 
             for (chunk_vertices, chunk_indices, index_count) in &self.world_state.chunk_buffers {
                 render_pass.set_vertex_buffer(0, chunk_vertices.slice(..));

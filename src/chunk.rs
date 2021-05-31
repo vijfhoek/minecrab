@@ -15,6 +15,7 @@ pub enum BlockType {
     Bedrock,
     Sand,
     Gravel,
+    Water,
 }
 
 impl BlockType {
@@ -28,6 +29,7 @@ impl BlockType {
             BlockType::Bedrock     => ( 5,  5,  5,  5,  5,  5),
             BlockType::Sand        => ( 6,  6,  6,  6,  6,  6),
             BlockType::Gravel      => ( 7,  7,  7,  7,  7,  7),
+            BlockType::Water       => ( 8,  8,  8,  8,  8,  8), // up to 71
         };
         indices
     }
@@ -82,7 +84,7 @@ impl Chunk {
         let mut blocks: ChunkBlocks = Default::default();
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                let v = terrain_noise.get_value(x, z) * 20.0 + 64.0;
+                let v = terrain_noise.get_value(x, z) * 20.0 + 128.0;
                 let v = v.round() as i32;
 
                 let s = stone_noise.get_value(x, z) * 20.0 + 4.5;
@@ -112,6 +114,15 @@ impl Chunk {
                     blocks[0][z][x] = Some(Block {
                         block_type: BlockType::Bedrock,
                     });
+                }
+                if chunk_y < 128 / CHUNK_SIZE as i32 {
+                    for y in 0..CHUNK_SIZE {
+                        if blocks[y][z][x].is_none() {
+                            blocks[y][z][x] = Some(Block {
+                                block_type: BlockType::Water,
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -176,6 +187,12 @@ impl Chunk {
             visited.insert((x, z));
 
             if let Some(&block_type) = &culled.get(&(x, z)) {
+                if block_type == BlockType::Water {
+                    let quad = Quad::new(x as i32, z as i32, 1, 1);
+                    quads.push((block_type, y as i32, offset, quad));
+                    continue;
+                }
+
                 // Extend horizontally
                 let mut xmax = x + 1;
                 for x_ in x..CHUNK_SIZE {
@@ -218,9 +235,8 @@ impl Chunk {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
         for (quad_index, (block_type, y, offset, quad)) in quads.iter().enumerate() {
-            #[rustfmt::skip]
-            let v = cube::vertices(quad, *y, *offset, block_type.texture_indices());
-            vertices.extend(&v);
+            let texture_indices = block_type.texture_indices();
+            vertices.extend(&cube::vertices(quad, *y, 1.0, *offset, texture_indices));
 
             for index in cube::INDICES {
                 indices.push(index + quad_index as u16 * 24);

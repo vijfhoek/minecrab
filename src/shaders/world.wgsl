@@ -5,16 +5,15 @@ struct Uniforms {
 };
 
 [[block]]
-struct Light {
-    position: vec3<f32>;
-    color: vec3<f32>;
+struct Time {
+    time: f32;
 };
 
 [[group(1), binding(0)]]
 var<uniform> uniforms: Uniforms;
 
 [[group(2), binding(0)]]
-var<uniform> light: Light;
+var<uniform> time: Time;
 
 struct VertexInput {
     [[location(0)]] position: vec3<f32>;
@@ -32,9 +31,18 @@ struct VertexOutput {
 [[stage(vertex)]]
 fn main(model: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.texture_coordinates = model.texture_coordinates;
+
     out.world_normal = model.normal;
-    out.world_position = model.position;
+    if (model.texture_coordinates.z == 8.0) {
+        // water
+        let offset = (sin(time.time * 0.5 + model.position.x) * cos(time.time * 0.9 + model.position.y) + 2.5) / 10.0;
+        out.world_position = vec3<f32>(model.position.x, model.position.y - offset, model.position.z);
+        out.texture_coordinates = vec3<f32>(model.texture_coordinates.xy + (time.time / 10.0), 8.0 + (time.time * 10.0) % 64.0);
+    } else {
+        out.world_position = model.position;
+        out.texture_coordinates = model.texture_coordinates;
+    }
+
     out.clip_position = uniforms.view_projection * vec4<f32>(out.world_position, 1.0);
     return out;
 }
@@ -51,18 +59,21 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
         i32(in.texture_coordinates.z)
     );
 
-    let ambient_strength = 0.1;
-    let ambient_color = light.color * ambient_strength;
+    let light_position = vec3<f32>(256.0, 500.0, 200.0);
+    let light_color = vec3<f32>(1.0, 1.0, 1.0);
 
-    let light_direction = normalize(light.position - in.world_position);
+    let ambient_strength = 0.1;
+    let ambient_color = light_color * ambient_strength;
+
+    let light_direction = normalize(light_position - in.world_position);
     let view_direction = normalize(uniforms.view_position.xyz - in.world_position);
     let half_direction = normalize(view_direction + light_direction);
 
     let diffuse_strength = max(dot(in.world_normal, light_direction), 0.0);
-    let diffuse_color = light.color * diffuse_strength;
+    let diffuse_color = light_color * diffuse_strength;
 
     let specular_strength = pow(max(dot(in.world_normal, half_direction), 0.0), 32.0);
-    let specular_color = specular_strength * light.color;
+    let specular_color = specular_strength * light_color;
 
     var result: vec3<f32> = (ambient_color + diffuse_color + specular_color) * object_color.xyz;
 

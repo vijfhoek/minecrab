@@ -1,7 +1,7 @@
 mod camera;
 mod chunk;
 mod cube;
-mod light;
+mod time;
 mod quad;
 mod state;
 mod texture;

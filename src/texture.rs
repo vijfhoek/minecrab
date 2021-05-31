@@ -59,6 +59,7 @@ impl Texture {
         bytes: &[u8],
         label: &str,
     ) -> anyhow::Result<Self> {
+        println!("decoding image");
         let image = image::load_from_memory(bytes)?;
         let rgba = image.into_rgba8();
         let (width, height) = rgba.dimensions();
@@ -69,6 +70,7 @@ impl Texture {
             depth_or_array_layers: 1,
         };
 
+        println!("creating texture");
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: texture_size,
@@ -79,6 +81,7 @@ impl Texture {
             usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
         });
 
+        println!("writing texture");
         queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture,
@@ -94,12 +97,14 @@ impl Texture {
             texture_size,
         );
 
+        println!("creating texture view");
         let view = texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some(&format!("texture_view_{}", label)),
             dimension: Some(wgpu::TextureViewDimension::D2),
-            array_layer_count: NonZeroU32::new(1),
             ..wgpu::TextureViewDescriptor::default()
         });
+
+        println!("done");
 
         Ok(Self {
             texture,

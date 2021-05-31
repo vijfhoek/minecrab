@@ -1,5 +1,7 @@
-use crate::instance::Instance;
-use ahash::AHashMap;
+use std::collections::VecDeque;
+
+use crate::{cube, quad::Quad, vertex::Vertex};
+use ahash::{AHashMap, AHashSet};
 use cgmath::{InnerSpace, Vector3};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
 
@@ -7,8 +9,11 @@ use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
 pub enum BlockType {
     Cobblestone,
     Dirt,
-    Grass,
     Stone,
+    Grass,
+    Bedrock,
+    Sand,
+    Gravel,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -16,7 +21,7 @@ pub struct Block {
     pub block_type: BlockType,
 }
 
-const CHUNK_SIZE: usize = 16;
+pub(crate) const CHUNK_SIZE: usize = 16;
 
 type ChunkBlocks = [[[Option<Block>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
 
@@ -85,6 +90,12 @@ impl Chunk {
                         block_type: BlockType::Grass,
                     });
                 }
+
+                if chunk_y == 0 {
+                    blocks[0][z][x] = Some(Block {
+                        block_type: BlockType::Bedrock,
+                    });
+                }
             }
         }
 
@@ -95,53 +106,91 @@ impl Chunk {
     }
 
     fn check_visible(&self, x: usize, y: usize, z: usize) -> bool {
-        (x > 0 && y > 0 && z > 0 && self.get_block(x - 1, y - 1, z - 1).is_some())
-            && (y > 0 && z > 0 && self.get_block(x + 1, y - 1, z - 1).is_some())
-            && (x > 0 && z > 0 && self.get_block(x - 1, y + 1, z - 1).is_some())
-            && (z > 0 && self.get_block(x + 1, y + 1, z - 1).is_some())
-            && (x > 0 && y > 0 && self.get_block(x - 1, y - 1, z + 1).is_some())
-            && (y > 0 && self.get_block(x + 1, y - 1, z + 1).is_some())
-            && (x > 0 && self.get_block(x - 1, y + 1, z + 1).is_some())
-            && (x > 0 && y > 0 && z > 0 && self.get_block(x + 1, y + 1, z + 1).is_some())
+        self.get_block(x - 1, y - 1, z - 1).is_some()
+            && self.get_block(x + 1, y - 1, z - 1).is_some()
+            && self.get_block(x - 1, y + 1, z - 1).is_some()
+            && self.get_block(x + 1, y + 1, z - 1).is_some()
+            && self.get_block(x - 1, y - 1, z + 1).is_some()
+            && self.get_block(x + 1, y - 1, z + 1).is_some()
+            && self.get_block(x - 1, y + 1, z + 1).is_some()
+            && self.get_block(x + 1, y + 1, z + 1).is_some()
     }
 
-    pub fn to_instances(&self, offset: Vector3<i32>) -> Vec<(BlockType, Vec<Instance>)> {
-        let mut map: AHashMap<BlockType, Vec<Instance>> = AHashMap::new();
+    pub fn to_instances(&self, offset: Vector3<i32>) -> (Vec<Vertex>, Vec<u16>) {
+        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad)> = Vec::new();
 
         for (y, y_blocks) in self.blocks.iter().enumerate() {
+            let mut culled = AHashMap::new();
+            let mut todo = VecDeque::new();
             for (z, z_blocks) in y_blocks.iter().enumerate() {
                 for (x, block) in z_blocks.iter().enumerate() {
                     if let Some(block) = block {
-                        let position = Vector3::new(
-                            (x as i32 + offset.x * 16) as f32,
-                            (y as i32 + offset.y * 16) as f32,
-                            (z as i32 + offset.z * 16) as f32,
-                        );
-
                         // Don't add the block if it's not visible
                         if self.check_visible(x, y, z) {
                             continue;
                         }
 
-                        let instances = map.entry(block.block_type).or_default();
-                        instances.push(Instance {
-                            position: position.into(),
-                            highlighted: (self.highlighted == Some(Vector3::new(x, y, z))) as i32,
-                        });
+                        culled.insert((x, z), block.block_type);
+                        todo.push_back((x, z));
                     }
+                }
+            }
+
+            let mut visited = AHashSet::new();
+            while let Some((x, z)) = todo.pop_front() {
+                if visited.contains(&(x, z)) {
+                    continue;
+                }
+                visited.insert((x, z));
+
+                if let Some(&block_type) = &culled.get(&(x, z)) {
+                    // Extend horizontally
+                    let mut xmax = x + 1;
+                    for x_ in x..CHUNK_SIZE {
+                        xmax = x_ + 1;
+                        if culled.get(&(x_ + 1, z)) != Some(&block_type)
+                            || visited.contains(&(x_ + 1, z))
+                        {
+                            break;
+                        }
+                        visited.insert((x_ + 1, z));
+                    }
+
+                    // Extend vertically
+                    let mut zmax = z + 1;
+                    'z: for z_ in z..CHUNK_SIZE {
+                        zmax = z_ + 1;
+                        for x_ in x..xmax {
+                            if culled.get(&(x_, z_ + 1)) != Some(&block_type)
+                                || visited.contains(&(x_, z_ + 1))
+                            {
+                                break 'z;
+                            }
+                        }
+                        for x_ in x..xmax {
+                            visited.insert((x_, z_ + 1));
+                        }
+                    }
+
+                    let quad = Quad::new(x as i32, z as i32, (xmax - x) as i32, (zmax - z) as i32);
+                    quads.push((block_type, y as i32, offset, quad));
                 }
             }
         }
 
-        map.drain().collect()
-    }
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+        for (quad_index, (_, y, offset, quad)) in quads.iter().enumerate() {
+            #[rustfmt::skip]
+            let v = cube::vertices(quad, *y, *offset, (0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1));
+            vertices.extend(&v);
 
-    pub fn get_mut_block(&mut self, x: usize, y: usize, z: usize) -> Option<&mut Block> {
-        self.blocks
-            .get_mut(y)
-            .and_then(|blocks| blocks.get_mut(z))
-            .and_then(|blocks| blocks.get_mut(x))
-            .and_then(|block| block.as_mut())
+            for index in cube::INDICES {
+                indices.push(index + quad_index as u16 * 24);
+            }
+        }
+
+        (vertices, indices)
     }
 
     pub fn get_block(&self, x: usize, y: usize, z: usize) -> Option<&Block> {

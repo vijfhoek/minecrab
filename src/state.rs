@@ -1,19 +1,13 @@
 use std::time::Duration;
 
-use cgmath::{EuclideanSpace, InnerSpace, Rad};
+use cgmath::{InnerSpace, Rad};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use winit::{
     event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
     window::Window,
 };
 
-use crate::{
-    chunk::{Block, BlockType},
-    cube,
-    texture::Texture,
-    vertex::Vertex,
-    world_state::WorldState,
-};
+use crate::{texture::Texture, vertex::Vertex, world_state::WorldState};
 
 const UI_SCALE_X: f32 = 0.0045;
 const UI_SCALE_Y: f32 = 0.008;
@@ -387,33 +381,32 @@ impl State {
                 ..
             }) => self.input_keyboard(key, state),
 
-            DeviceEvent::Button {
-                button,
-                state: ElementState::Pressed,
-            } if self.mouse_grabbed => {
-                let camera = &self.world_state.camera;
+            // DeviceEvent::Button {
+            //     button,
+            //     state: ElementState::Pressed,
+            // } if self.mouse_grabbed => {
+            //     let camera = &self.world_state.camera;
 
-                // if let Some((pos, axis)) = self
-                //     .world_state
-                //     .chunk
-                //     .raycast(camera.position.to_vec(), camera.direction())
-                // {
-                //     if *button == 1 {
-                //         self.world_state.chunk.blocks[pos.y][pos.z][pos.x].take();
-                //         dbg!(&pos);
-                //         self.world_state.update_chunk(&self.render_queue);
-                //     } else if *button == 3 {
-                //         let new_pos = pos.map(|x| x as i32) - axis;
-                //         dbg!(&axis, &new_pos);
-                //         self.world_state.chunk.blocks[new_pos.y as usize][new_pos.z as usize]
-                //             [new_pos.x as usize] = Some(Block {
-                //             block_type: BlockType::Cobblestone,
-                //         });
-                //         self.world_state.update_chunk(&self.render_queue);
-                //     }
-                // }
-            }
-
+            //     // if let Some((pos, axis)) = self
+            //     //     .world_state
+            //     //     .chunk
+            //     //     .raycast(camera.position.to_vec(), camera.direction())
+            //     // {
+            //     //     if *button == 1 {
+            //     //         self.world_state.chunk.blocks[pos.y][pos.z][pos.x].take();
+            //     //         dbg!(&pos);
+            //     //         self.world_state.update_chunk(&self.render_queue);
+            //     //     } else if *button == 3 {
+            //     //         let new_pos = pos.map(|x| x as i32) - axis;
+            //     //         dbg!(&axis, &new_pos);
+            //     //         self.world_state.chunk.blocks[new_pos.y as usize][new_pos.z as usize]
+            //     //             [new_pos.x as usize] = Some(Block {
+            //     //             block_type: BlockType::Cobblestone,
+            //     //         });
+            //     //         self.world_state.update_chunk(&self.render_queue);
+            //     //     }
+            //     // }
+            // }
             DeviceEvent::MouseMotion { delta: (dx, dy) } => self.input_mouse(*dx, *dy),
             _ => (),
         }
@@ -486,33 +479,16 @@ impl State {
             render_pass.set_bind_group(1, &self.world_state.uniform_bind_group, &[]);
             render_pass.set_bind_group(2, &self.world_state.light_bind_group, &[]);
 
-            render_pass.set_index_buffer(
-                self.world_state.index_buffer.slice(..),
-                wgpu::IndexFormat::Uint16,
-            );
+            // Set the texture
+            let texture_bind_group = &self.world_state.texture_bind_group;
+            render_pass.set_bind_group(0, texture_bind_group, &[]);
 
-            for (block_type, offset, instance_list) in &self.world_state.instance_lists {
-                // Set the texture
-                let texture_bind_group = &self.world_state.texture_bind_groups[block_type];
-                render_pass.set_bind_group(0, texture_bind_group, &[]);
+            for (chunk_vertices, chunk_indices, index_count) in &self.world_state.chunk_buffers {
+                render_pass.set_vertex_buffer(0, chunk_vertices.slice(..));
+                render_pass.set_index_buffer(chunk_indices.slice(..), wgpu::IndexFormat::Uint16);
 
-                // Set the vertex buffer
-                let vertex_buffer = match block_type {
-                    BlockType::Grass => self.world_state.vertex_buffer_grass.slice(..),
-                    _ => self.world_state.vertex_buffer.slice(..),
-                };
-                render_pass.set_vertex_buffer(0, vertex_buffer);
-
-                // Set the instance buffer
-                let instance_buffer = &self.world_state.instance_buffers[&(*block_type, *offset)];
-                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-
-                render_pass.draw_indexed(
-                    0..cube::INDICES.len() as u32,
-                    0,
-                    0..instance_list.len() as u32,
-                );
-                triangle_count += cube::INDICES.len() / 3 * instance_list.len();
+                render_pass.draw_indexed(0..*index_count as u32, 0, 0..1);
+                triangle_count += index_count / 3;
             }
         }
 
@@ -539,6 +515,7 @@ impl State {
 
             render_pass.set_bind_group(0, &self.ui_texture_bind_group, &[]);
             render_pass.draw_indexed(0..CROSSHAIR_INDICES.len() as u32, 0, 0..1);
+
             triangle_count += CROSSHAIR_INDICES.len() / 3;
         }
 

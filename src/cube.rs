@@ -2,6 +2,7 @@ use cgmath::Vector3;
 
 use crate::{quad::Quad, vertex::Vertex};
 
+#[allow(clippy::many_single_char_names)]
 pub fn vertices(
     quad: &Quad,
     y: i32,
@@ -38,22 +39,22 @@ pub fn vertices(
         Vertex { position: [x + w, y,       z      ], texture_coordinates: [0.0, 1.0, t.2 as f32], normal: [0.0, 0.0, -1.0] },
 
         // Front
-        Vertex { position: [x,     y,       z + h], texture_coordinates: [0.0, 1.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
-        Vertex { position: [x,     y + 1.0, z + h], texture_coordinates: [0.0, 0.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
-        Vertex { position: [x + w, y + 1.0, z + h], texture_coordinates: [w,   0.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
-        Vertex { position: [x + w, y,       z + h], texture_coordinates: [w,   1.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [x,     y,       z + h  ], texture_coordinates: [0.0, 1.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [x,     y + 1.0, z + h  ], texture_coordinates: [0.0, 0.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [x + w, y + 1.0, z + h  ], texture_coordinates: [w,   0.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
+        Vertex { position: [x + w, y,       z + h  ], texture_coordinates: [w,   1.0, t.3 as f32], normal: [0.0, 0.0, 1.0] },
 
         // Bottom
-        Vertex { position: [x,     y, z + 0.0], texture_coordinates: [w,   0.0, t.4 as f32], normal: [0.0, -1.0, 0.0] },
-        Vertex { position: [x,     y, z + h  ], texture_coordinates: [w,   h,   t.4 as f32], normal: [0.0, -1.0, 0.0] },
-        Vertex { position: [x + w, y, z + h  ], texture_coordinates: [0.0, h,   t.4 as f32], normal: [0.0, -1.0, 0.0] },
-        Vertex { position: [x + w, y, z      ], texture_coordinates: [0.0, 0.0, t.4 as f32], normal: [0.0, -1.0, 0.0] },
+        Vertex { position: [x,     y,       z + 0.0], texture_coordinates: [w,   0.0, t.4 as f32], normal: [0.0, -1.0, 0.0] },
+        Vertex { position: [x,     y,       z + h  ], texture_coordinates: [w,   h,   t.4 as f32], normal: [0.0, -1.0, 0.0] },
+        Vertex { position: [x + w, y,       z + h  ], texture_coordinates: [0.0, h,   t.4 as f32], normal: [0.0, -1.0, 0.0] },
+        Vertex { position: [x + w, y,       z      ], texture_coordinates: [0.0, 0.0, t.4 as f32], normal: [0.0, -1.0, 0.0] },
 
         // Top
-        Vertex { position: [x,     y + 1.0, z    ], texture_coordinates: [0.0, 0.0, t.5 as f32], normal: [0.0, 1.0, 0.0] },
-        Vertex { position: [x,     y + 1.0, z + h], texture_coordinates: [0.0, h,   t.5 as f32], normal: [0.0, 1.0, 0.0] },
-        Vertex { position: [x + w, y + 1.0, z + h], texture_coordinates: [w,   h,   t.5 as f32], normal: [0.0, 1.0, 0.0] },
-        Vertex { position: [x + w, y + 1.0, z    ], texture_coordinates: [w,   0.0, t.5 as f32], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [x,     y + 1.0, z      ], texture_coordinates: [0.0, 0.0, t.5 as f32], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [x,     y + 1.0, z + h  ], texture_coordinates: [0.0, h,   t.5 as f32], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [x + w, y + 1.0, z + h  ], texture_coordinates: [w,   h,   t.5 as f32], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [x + w, y + 1.0, z      ], texture_coordinates: [w,   0.0, t.5 as f32], normal: [0.0, 1.0, 0.0] },
     ];
     vertices
 }

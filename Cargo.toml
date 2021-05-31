@@ -21,3 +21,6 @@ winit = { version = "0.25.0", default_features = false, features = ["x11"] }
 
 [profile.release]
 debug = true
+
+[profile.dev.package."*"]
+opt-level = 3

@@ -438,7 +438,7 @@ impl State {
         );
     }
 
-    pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
+    pub fn render(&mut self) -> Result<usize, wgpu::SwapChainError> {
         let frame = self.swap_chain.get_current_frame()?.output;
 
         let mut render_encoder =
@@ -448,6 +448,7 @@ impl State {
                 });
 
         let mut triangle_count = 0;
+
         {
             let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("render_pass"),
@@ -481,7 +482,7 @@ impl State {
             render_pass.set_bind_group(1, &self.world_state.uniform_bind_group, &[]);
             render_pass.set_bind_group(2, &self.world_state.light_bind_group, &[]);
 
-            for (chunk_vertices, chunk_indices, _, index_count) in &self.world_state.chunk_buffers {
+            for (chunk_vertices, chunk_indices, index_count) in &self.world_state.chunk_buffers {
                 render_pass.set_vertex_buffer(0, chunk_vertices.slice(..));
                 render_pass.set_index_buffer(chunk_indices.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..*index_count as u32, 0, 0..1);
@@ -516,11 +517,9 @@ impl State {
             triangle_count += CROSSHAIR_INDICES.len() / 3;
         }
 
-        // dbg!(triangle_count);
-
         self.render_queue
             .submit(std::iter::once(render_encoder.finish()));
 
-        Ok(())
+        Ok(triangle_count)
     }
 }

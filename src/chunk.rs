@@ -5,6 +5,7 @@ use ahash::{AHashMap, AHashSet};
 use cgmath::{InnerSpace, Vector3};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BlockType {
     Cobblestone,
@@ -257,6 +258,7 @@ impl Chunk {
         }
     }
 
+    #[allow(dead_code)]
     pub fn raycast(
         &self,
         origin: Vector3<f32>,

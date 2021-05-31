@@ -1,3 +1,6 @@
+mod hud;
+mod world;
+
 use std::time::Duration;
 
 use cgmath::{InnerSpace, Rad};
@@ -6,7 +9,8 @@ use winit::{
     window::Window,
 };
 
-use crate::{hud_state::HudState, world_state::WorldState};
+use hud::HudState;
+use world::WorldState;
 
 pub struct State {
     pub window_size: winit::dpi::PhysicalSize<u32>,

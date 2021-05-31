@@ -88,7 +88,7 @@ impl HudState {
         let texture = Texture::from_bytes(
             render_device,
             render_queue,
-            include_bytes!("../assets/gui/widgets.png"),
+            include_bytes!("../../assets/gui/widgets.png"),
             "Texture GUI widgets",
         )
         .unwrap();
@@ -151,7 +151,7 @@ impl HudState {
         let module = &render_device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("UI shader"),
             flags: wgpu::ShaderFlags::all(),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/ui.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/ui.wgsl").into()),
         });
 
         let pipeline_layout =

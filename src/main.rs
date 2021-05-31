@@ -1,7 +1,6 @@
 mod camera;
 mod chunk;
 mod cube;
-mod hud_state;
 mod light;
 mod quad;
 mod state;
@@ -9,7 +8,6 @@ mod texture;
 mod uniforms;
 mod vertex;
 mod world;
-mod world_state;
 
 use std::time::{Duration, Instant};
 use wgpu::SwapChainError;

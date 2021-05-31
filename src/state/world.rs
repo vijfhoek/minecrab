@@ -161,7 +161,7 @@ impl WorldState {
             &(wgpu::ShaderModuleDescriptor {
                 label: Some("shader"),
                 flags: wgpu::ShaderFlags::all(),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shaders/world.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/world.wgsl").into()),
             }),
         );
 

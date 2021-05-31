@@ -222,7 +222,7 @@ impl WorldState {
     pub fn update_chunk(&mut self, render_device: &wgpu::Device) {
         let instant = Instant::now();
 
-        let world_geometry = self.world.to_instances();
+        let world_geometry = self.world.to_geometry();
         self.chunk_buffers.clear();
         for (chunk_vertices, chunk_indices, index_textures) in world_geometry {
             self.chunk_buffers.push((

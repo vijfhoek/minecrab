@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, usize};
 
 use crate::{cube, quad::Quad, vertex::Vertex};
 use ahash::{AHashMap, AHashSet};
@@ -132,71 +132,88 @@ impl Chunk {
             && self.get_block(x + 1, y + 1, z + 1).is_some()
     }
 
-    pub fn to_instances(
+    fn cull_layer(
         &self,
-        offset: Vector3<i32>,
-    ) -> (Vec<Vertex>, Vec<u16>, Vec<Vec<(usize, usize, usize)>>) {
-        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad)> = Vec::new();
+        y: usize,
+    ) -> (
+        AHashMap<(usize, usize), BlockType>,
+        VecDeque<(usize, usize)>,
+    ) {
+        let mut output = AHashMap::new();
+        let mut queue = VecDeque::new();
 
-        for (y, y_blocks) in self.blocks.iter().enumerate() {
-            let mut culled = AHashMap::new();
-            let mut todo = VecDeque::new();
-            for (z, z_blocks) in y_blocks.iter().enumerate() {
-                for (x, block) in z_blocks.iter().enumerate() {
-                    if let Some(block) = block {
-                        // Don't add the block if it's not visible
-                        if self.check_visible(x, y, z) {
-                            continue;
-                        }
-
-                        culled.insert((x, z), block.block_type);
-                        todo.push_back((x, z));
-                    }
-                }
-            }
-
-            let mut visited = AHashSet::new();
-            while let Some((x, z)) = todo.pop_front() {
-                if visited.contains(&(x, z)) {
-                    continue;
-                }
-                visited.insert((x, z));
-
-                if let Some(&block_type) = &culled.get(&(x, z)) {
-                    // Extend horizontally
-                    let mut xmax = x + 1;
-                    for x_ in x..CHUNK_SIZE {
-                        xmax = x_ + 1;
-                        if culled.get(&(x_ + 1, z)) != Some(&block_type)
-                            || visited.contains(&(x_ + 1, z))
-                        {
-                            break;
-                        }
-                        visited.insert((x_ + 1, z));
+        let y_blocks = &self.blocks[y];
+        for (z, z_blocks) in y_blocks.iter().enumerate() {
+            for (x, block) in z_blocks.iter().enumerate() {
+                if let Some(block) = block {
+                    // Don't add the block if it's not visible
+                    if self.check_visible(x, y, z) {
+                        continue;
                     }
 
-                    // Extend vertically
-                    let mut zmax = z + 1;
-                    'z: for z_ in z..CHUNK_SIZE {
-                        zmax = z_ + 1;
-                        for x_ in x..xmax {
-                            if culled.get(&(x_, z_ + 1)) != Some(&block_type)
-                                || visited.contains(&(x_, z_ + 1))
-                            {
-                                break 'z;
-                            }
-                        }
-                        for x_ in x..xmax {
-                            visited.insert((x_, z_ + 1));
-                        }
-                    }
-
-                    let quad = Quad::new(x as i32, z as i32, (xmax - x) as i32, (zmax - z) as i32);
-                    quads.push((block_type, y as i32, offset, quad));
+                    output.insert((x, z), block.block_type);
+                    queue.push_back((x, z));
                 }
             }
         }
 
+        (output, queue)
+    }
+
+    fn layer_to_quads(
+        y: usize,
+        offset: Vector3<i32>,
+        culled: AHashMap<(usize, usize), BlockType>,
+        queue: &mut VecDeque<(usize, usize)>,
+    ) -> Vec<(BlockType, i32, Vector3<i32>, Quad)> {
+        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad)> = Vec::new();
+        let mut visited = AHashSet::new();
+        while let Some((x, z)) = queue.pop_front() {
+            if visited.contains(&(x, z)) {
+                continue;
+            }
+            visited.insert((x, z));
+
+            if let Some(&block_type) = &culled.get(&(x, z)) {
+                // Extend horizontally
+                let mut xmax = x + 1;
+                for x_ in x..CHUNK_SIZE {
+                    xmax = x_ + 1;
+                    if culled.get(&(x_ + 1, z)) != Some(&block_type)
+                        || visited.contains(&(x_ + 1, z))
+                    {
+                        break;
+                    }
+                    visited.insert((x_ + 1, z));
+                }
+
+                // Extend vertically
+                let mut zmax = z + 1;
+                'z: for z_ in z..CHUNK_SIZE {
+                    zmax = z_ + 1;
+                    for x_ in x..xmax {
+                        if culled.get(&(x_, z_ + 1)) != Some(&block_type)
+                            || visited.contains(&(x_, z_ + 1))
+                        {
+                            break 'z;
+                        }
+                    }
+                    for x_ in x..xmax {
+                        visited.insert((x_, z_ + 1));
+                    }
+                }
+
+                let quad = Quad::new(x as i32, z as i32, (xmax - x) as i32, (zmax - z) as i32);
+                quads.push((block_type, y as i32, offset, quad));
+            }
+        }
+
+        quads
+    }
+
+    fn quads_to_geometry(
+        quads: Vec<(BlockType, i32, Vector3<i32>, Quad)>,
+    ) -> (Vec<Vertex>, Vec<u16>, Vec<Vec<(usize, usize, usize)>>) {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
         let mut index_indices: Vec<Vec<(usize, usize, usize)>> = Vec::new();
@@ -223,6 +240,21 @@ impl Chunk {
         }
 
         (vertices, indices, index_indices)
+    }
+
+    pub fn to_geometry(
+        &self,
+        offset: Vector3<i32>,
+    ) -> (Vec<Vertex>, Vec<u16>, Vec<Vec<(usize, usize, usize)>>) {
+        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad)> = Vec::new();
+
+        for y in 0..CHUNK_SIZE {
+            let (culled, mut queue) = self.cull_layer(y);
+            let mut layer_quads = Self::layer_to_quads(y, offset, culled, &mut queue);
+            quads.append(&mut layer_quads);
+        }
+
+        Self::quads_to_geometry(quads)
     }
 
     pub fn get_block(&self, x: usize, y: usize, z: usize) -> Option<&Block> {

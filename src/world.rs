@@ -26,22 +26,22 @@ impl World {
         Self { chunks }
     }
 
-    pub fn to_instances(&self) -> Vec<(Vec<Vertex>, Vec<u16>, Vec<Vec<(usize, usize, usize)>>)> {
+    pub fn to_geometry(&self) -> Vec<(Vec<Vertex>, Vec<u16>, Vec<Vec<(usize, usize, usize)>>)> {
         let instant = std::time::Instant::now();
-        let mut instances = Vec::new();
+        let mut geometry = Vec::new();
 
         for (y, chunks_y) in self.chunks.iter().enumerate() {
             for (z, chunks_z) in chunks_y.iter().enumerate() {
                 for (x, chunk) in chunks_z.iter().enumerate() {
                     let offset = Vector3::new(x as i32 * 16, y as i32 * 16, z as i32 * 16);
-                    instances.push(chunk.to_instances(offset));
+                    geometry.push(chunk.to_geometry(offset));
                 }
             }
         }
 
         let elapsed = instant.elapsed();
-        println!("generating world instances took {:?}", elapsed);
+        println!("Generating world geometry took {:?}", elapsed);
 
-        instances
+        geometry
     }
 }

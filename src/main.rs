@@ -1,6 +1,7 @@
 mod camera;
 mod chunk;
 mod cube;
+mod hud_state;
 mod light;
 mod quad;
 mod state;
@@ -11,6 +12,7 @@ mod world;
 mod world_state;
 
 use std::time::{Duration, Instant};
+use wgpu::SwapChainError;
 use winit::{
     dpi::{PhysicalSize, Size},
     event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
@@ -42,6 +44,7 @@ fn main() {
     let mut frametime_max = Duration::from_secs(0);
 
     let mut last_render_time = Instant::now();
+    let mut triangle_count = 0;
 
     event_loop.run(move |event, _, control_flow| {
         match event {
@@ -99,8 +102,8 @@ fn main() {
                     let fps_min = 1_000_000 / frametime_max.as_micros();
 
                     println!(
-                        "{} frames | frametime avg={:?} min={:?} max={:?} | fps avg={} min={} max={}",
-                        frames, frametime, frametime_min, frametime_max, fps, fps_min, fps_max,
+                        "{} frames | frametime avg={:?} min={:?} max={:?} | fps avg={} min={} max={} | {} tris",
+                        frames, frametime, frametime_min, frametime_max, fps, fps_min, fps_max, triangle_count,
                     );
 
                     elapsed = Duration::from_secs(0);
@@ -115,13 +118,17 @@ fn main() {
                 state.update(dt);
 
                 match state.render() {
-                    Ok(_) => {}
-                    // Recreate the swap_chain if lost
-                    Err(wgpu::SwapChainError::Lost) => state.resize(state.window_size),
-                    // The system is out of memory, we should probably quit
-                    Err(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    // All other errors (Outdated, Timeout) should be resolved by the next frame
-                    Err(e) => eprintln!("{:?}", e),
+                    Err(root_cause) =>
+                        match root_cause.downcast_ref::<SwapChainError>() {
+                            // Recreate the swap_chain if lost
+                            Some(wgpu::SwapChainError::Lost) => state.resize(state.window_size),
+                            // The system is out of memory, we should probably quit
+                            Some(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                            // All other errors (Outdated, Timeout) should be resolved by the next frame
+                            Some(_) | None => eprintln!("{:?}", root_cause),
+                        }
+
+                    Ok(v) => triangle_count = v
                 }
             }
             Event::MainEventsCleared => {

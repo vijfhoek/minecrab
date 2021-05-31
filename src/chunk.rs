@@ -35,11 +35,11 @@ impl Chunk {
             .set_size(CHUNK_SIZE, CHUNK_SIZE)
             .set_x_bounds(
                 chunk_x as f64 * TERRAIN_NOISE_SCALE + TERRAIN_NOISE_OFFSET,
-                chunk_x as f64 * TERRAIN_NOISE_SCALE * 2.0 + TERRAIN_NOISE_OFFSET,
+                chunk_x as f64 * TERRAIN_NOISE_SCALE + TERRAIN_NOISE_SCALE + TERRAIN_NOISE_OFFSET,
             )
             .set_y_bounds(
                 chunk_z as f64 * TERRAIN_NOISE_SCALE + TERRAIN_NOISE_OFFSET,
-                chunk_z as f64 * TERRAIN_NOISE_SCALE * 2.0 + TERRAIN_NOISE_OFFSET,
+                chunk_z as f64 * TERRAIN_NOISE_SCALE + TERRAIN_NOISE_SCALE + TERRAIN_NOISE_OFFSET,
             )
             .build();
 
@@ -49,11 +49,11 @@ impl Chunk {
             .set_size(CHUNK_SIZE, CHUNK_SIZE)
             .set_x_bounds(
                 chunk_x as f64 * STONE_NOISE_SCALE + STONE_NOISE_OFFSET,
-                chunk_x as f64 * STONE_NOISE_SCALE * 2.0 + STONE_NOISE_OFFSET,
+                chunk_x as f64 * STONE_NOISE_SCALE + STONE_NOISE_SCALE + STONE_NOISE_OFFSET,
             )
             .set_y_bounds(
-                chunk_y as f64 * STONE_NOISE_SCALE + STONE_NOISE_OFFSET,
-                chunk_y as f64 * STONE_NOISE_SCALE * 2.0 + STONE_NOISE_OFFSET,
+                chunk_z as f64 * STONE_NOISE_SCALE + STONE_NOISE_OFFSET,
+                chunk_z as f64 * STONE_NOISE_SCALE + STONE_NOISE_SCALE + STONE_NOISE_OFFSET,
             )
             .build();
 

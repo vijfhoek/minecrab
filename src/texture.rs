@@ -3,8 +3,6 @@ use std::num::NonZeroU32;
 use image::EncodableLayout;
 use wgpu::Origin3d;
 
-use crate::texture;
-
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub sampler: Option<wgpu::Sampler>,

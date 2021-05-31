@@ -213,39 +213,23 @@ impl Chunk {
 
     fn quads_to_geometry(
         quads: Vec<(BlockType, i32, Vector3<i32>, Quad)>,
-    ) -> (Vec<Vertex>, Vec<u16>, Vec<Vec<(usize, usize, usize)>>) {
+    ) -> (Vec<Vertex>, Vec<u16>) {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
-        let mut index_indices: Vec<Vec<(usize, usize, usize)>> = Vec::new();
         for (quad_index, (block_type, y, offset, quad)) in quads.iter().enumerate() {
             #[rustfmt::skip]
             let v = cube::vertices(quad, *y, *offset, block_type.texture_indices());
             vertices.extend(&v);
-
-            let o = indices.len();
-            #[rustfmt::skip]
-            index_indices.push(match block_type {
-                BlockType::Cobblestone => vec![(o + 0, o + 36, 0)],
-                BlockType::Dirt        => vec![(o + 0, o + 36, 1)],
-                BlockType::Stone       => vec![(o + 0, o + 36, 2)],
-                BlockType::Grass       => vec![(o + 0, o + 24, 4), (24, 30, 1), (30, 36, 3)],
-                BlockType::Bedrock     => vec![(o + 0, o + 36, 5)],
-                BlockType::Sand        => vec![(o + 0, o + 36, 5)],
-                BlockType::Gravel      => vec![(o + 0, o + 36, 6)],
-            });
 
             for index in cube::INDICES {
                 indices.push(index + quad_index as u16 * 24);
             }
         }
 
-        (vertices, indices, index_indices)
+        (vertices, indices)
     }
 
-    pub fn to_geometry(
-        &self,
-        offset: Vector3<i32>,
-    ) -> (Vec<Vertex>, Vec<u16>, Vec<Vec<(usize, usize, usize)>>) {
+    pub fn to_geometry(&self, offset: Vector3<i32>) -> (Vec<Vertex>, Vec<u16>) {
         let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad)> = Vec::new();
 
         for y in 0..CHUNK_SIZE {

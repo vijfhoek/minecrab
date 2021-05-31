@@ -25,12 +25,7 @@ pub struct WorldState {
     pub light_bind_group: wgpu::BindGroup,
     pub world: World,
 
-    pub chunk_buffers: Vec<(
-        wgpu::Buffer,
-        wgpu::Buffer,
-        Vec<Vec<(usize, usize, usize)>>,
-        usize,
-    )>,
+    pub chunk_buffers: Vec<(wgpu::Buffer, wgpu::Buffer, usize)>,
 }
 
 impl WorldState {
@@ -224,7 +219,7 @@ impl WorldState {
 
         let world_geometry = self.world.to_geometry();
         self.chunk_buffers.clear();
-        for (chunk_vertices, chunk_indices, index_textures) in world_geometry {
+        for (chunk_vertices, chunk_indices) in world_geometry {
             self.chunk_buffers.push((
                 render_device.create_buffer_init(&BufferInitDescriptor {
                     label: None,
@@ -236,7 +231,6 @@ impl WorldState {
                     contents: &bytemuck::cast_slice(&chunk_indices),
                     usage: wgpu::BufferUsage::INDEX,
                 }),
-                index_textures,
                 chunk_indices.len(),
             ));
         }

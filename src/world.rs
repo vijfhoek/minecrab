@@ -26,7 +26,7 @@ impl World {
         Self { chunks }
     }
 
-    pub fn to_geometry(&self) -> Vec<(Vec<Vertex>, Vec<u16>, Vec<Vec<(usize, usize, usize)>>)> {
+    pub fn to_geometry(&self) -> Vec<(Vec<Vertex>, Vec<u16>)> {
         let instant = std::time::Instant::now();
         let mut geometry = Vec::new();
 

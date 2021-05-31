@@ -1,3 +1,4 @@
-/target
-flamegraph.svg
-perf.data*
+/target/
+/generated/
+/flamegraph.svg
+/perf.data*

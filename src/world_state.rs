@@ -7,7 +7,7 @@ use winit::dpi::PhysicalSize;
 use crate::{
     camera::{Camera, Projection},
     light::Light,
-    texture::Texture,
+    texture::{Texture, TextureManager},
     uniforms::Uniforms,
     vertex::Vertex,
     world::World,
@@ -18,75 +18,28 @@ pub struct WorldState {
     pub uniforms: Uniforms,
     pub uniform_buffer: wgpu::Buffer,
     pub uniform_bind_group: wgpu::BindGroup,
-    pub texture_bind_group: wgpu::BindGroup,
+    pub texture_manager: TextureManager,
     pub camera: Camera,
     pub projection: Projection,
     pub depth_texture: Texture,
     pub light_bind_group: wgpu::BindGroup,
     pub world: World,
 
-    pub chunk_buffers: Vec<(wgpu::Buffer, wgpu::Buffer, usize)>,
+    pub chunk_buffers: Vec<(
+        wgpu::Buffer,
+        wgpu::Buffer,
+        Vec<Vec<(usize, usize, usize)>>,
+        usize,
+    )>,
 }
 
 impl WorldState {
-    fn create_textures(
-        render_device: &wgpu::Device,
-        render_queue: &wgpu::Queue,
-    ) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
-        let sampler = render_device.create_sampler(&wgpu::SamplerDescriptor::default());
-
-        let bind_group_layout =
-            render_device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("texture_bind_group_layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-
-        let instant = std::time::Instant::now();
-        let texture = Texture::from_bytes(
-            render_device,
-            render_queue,
-            include_bytes!("../assets/atlas.png"),
-            "Block texture atlas",
-        )
-        .unwrap();
-        println!("loading block texture atlas took {:?}", instant.elapsed());
-
-        let bind_group = render_device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Block texture atlas bind group"),
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
-                },
-            ],
-        });
-
-        (bind_group_layout, bind_group)
+    fn create_textures(render_device: &wgpu::Device, render_queue: &wgpu::Queue) -> TextureManager {
+        let mut texture_manager = TextureManager::new(render_device);
+        texture_manager
+            .load_all(render_device, render_queue)
+            .unwrap();
+        texture_manager
     }
 
     fn create_camera(swap_chain_descriptor: &wgpu::SwapChainDescriptor) -> (Camera, Projection) {
@@ -247,17 +200,13 @@ impl WorldState {
                 }],
             }),
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
                 polygon_mode: if wireframe {
                     wgpu::PolygonMode::Line
                 } else {
                     wgpu::PolygonMode::Fill
                 },
-                clamp_depth: false,
-                conservative: false,
+                ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: Texture::DEPTH_FORMAT,
@@ -266,11 +215,7 @@ impl WorldState {
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
+            multisample: wgpu::MultisampleState::default(),
         })
     }
 
@@ -279,7 +224,7 @@ impl WorldState {
 
         let world_geometry = self.world.to_instances();
         self.chunk_buffers.clear();
-        for (chunk_vertices, chunk_indices) in world_geometry {
+        for (chunk_vertices, chunk_indices, index_textures) in world_geometry {
             self.chunk_buffers.push((
                 render_device.create_buffer_init(&BufferInitDescriptor {
                     label: None,
@@ -291,6 +236,7 @@ impl WorldState {
                     contents: &bytemuck::cast_slice(&chunk_indices),
                     usage: wgpu::BufferUsage::INDEX,
                 }),
+                index_textures,
                 chunk_indices.len(),
             ));
         }
@@ -306,13 +252,12 @@ impl WorldState {
     ) -> WorldState {
         let world = World::generate();
 
-        let (world_texture_layout, texture_bind_group) =
-            Self::create_textures(&render_device, &render_queue);
+        let texture_manager = Self::create_textures(render_device, render_queue);
 
-        let (camera, projection) = Self::create_camera(&swap_chain_descriptor);
+        let (camera, projection) = Self::create_camera(swap_chain_descriptor);
 
         let (uniforms, uniform_buffer, world_uniform_layout, uniform_bind_group) =
-            Self::create_uniforms(&camera, &projection, &render_device);
+            Self::create_uniforms(&camera, &projection, render_device);
 
         let (_, _, world_light_layout, light_bind_group) = Self::create_light(&render_device);
 
@@ -320,7 +265,7 @@ impl WorldState {
             &render_device,
             &swap_chain_descriptor,
             &[
-                &world_texture_layout,
+                &texture_manager.bind_group_layout,
                 &world_uniform_layout,
                 &world_light_layout,
             ],
@@ -334,7 +279,7 @@ impl WorldState {
             uniforms,
             uniform_buffer,
             uniform_bind_group,
-            texture_bind_group,
+            texture_manager,
             camera,
             projection,
             depth_texture,

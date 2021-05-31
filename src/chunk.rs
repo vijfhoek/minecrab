@@ -16,6 +16,22 @@ pub enum BlockType {
     Gravel,
 }
 
+impl BlockType {
+    pub const fn texture_indices(self) -> (usize, usize, usize, usize, usize, usize) {
+        #[rustfmt::skip]
+        let indices = match self {
+            BlockType::Cobblestone => ( 0,  0,  0,  0,  0,  0),
+            BlockType::Dirt        => ( 1,  1,  1,  1,  1,  1),
+            BlockType::Stone       => ( 2,  2,  2,  2,  2,  2),
+            BlockType::Grass       => ( 4,  4,  4,  4,  2,  3),
+            BlockType::Bedrock     => ( 5,  5,  5,  5,  5,  5),
+            BlockType::Sand        => ( 6,  6,  6,  6,  6,  6),
+            BlockType::Gravel      => ( 7,  7,  7,  7,  7,  7),
+        };
+        indices
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Block {
     pub block_type: BlockType,
@@ -116,7 +132,10 @@ impl Chunk {
             && self.get_block(x + 1, y + 1, z + 1).is_some()
     }
 
-    pub fn to_instances(&self, offset: Vector3<i32>) -> (Vec<Vertex>, Vec<u16>) {
+    pub fn to_instances(
+        &self,
+        offset: Vector3<i32>,
+    ) -> (Vec<Vertex>, Vec<u16>, Vec<Vec<(usize, usize, usize)>>) {
         let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad)> = Vec::new();
 
         for (y, y_blocks) in self.blocks.iter().enumerate() {
@@ -180,17 +199,30 @@ impl Chunk {
 
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
-        for (quad_index, (_, y, offset, quad)) in quads.iter().enumerate() {
+        let mut index_indices: Vec<Vec<(usize, usize, usize)>> = Vec::new();
+        for (quad_index, (block_type, y, offset, quad)) in quads.iter().enumerate() {
             #[rustfmt::skip]
-            let v = cube::vertices(quad, *y, *offset, (0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1));
+            let v = cube::vertices(quad, *y, *offset, block_type.texture_indices());
             vertices.extend(&v);
+
+            let o = indices.len();
+            #[rustfmt::skip]
+            index_indices.push(match block_type {
+                BlockType::Cobblestone => vec![(o + 0, o + 36, 0)],
+                BlockType::Dirt        => vec![(o + 0, o + 36, 1)],
+                BlockType::Stone       => vec![(o + 0, o + 36, 2)],
+                BlockType::Grass       => vec![(o + 0, o + 24, 4), (24, 30, 1), (30, 36, 3)],
+                BlockType::Bedrock     => vec![(o + 0, o + 36, 5)],
+                BlockType::Sand        => vec![(o + 0, o + 36, 5)],
+                BlockType::Gravel      => vec![(o + 0, o + 36, 6)],
+            });
 
             for index in cube::INDICES {
                 indices.push(index + quad_index as u16 * 24);
             }
         }
 
-        (vertices, indices)
+        (vertices, indices, index_indices)
     }
 
     pub fn get_block(&self, x: usize, y: usize, z: usize) -> Option<&Block> {

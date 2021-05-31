@@ -18,13 +18,13 @@ var<uniform> light: Light;
 
 struct VertexInput {
     [[location(0)]] position: vec3<f32>;
-    [[location(1)]] texture_coordinates: vec2<f32>;
+    [[location(1)]] texture_coordinates: vec3<f32>;
     [[location(2)]] normal: vec3<f32>;
 };
 
 struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
-    [[location(0)]] texture_coordinates: vec2<f32>;
+    [[location(0)]] texture_coordinates: vec3<f32>;
     [[location(1)]] world_normal: vec3<f32>;
     [[location(2)]] world_position: vec3<f32>;
 };
@@ -39,13 +39,17 @@ fn main(model: VertexInput) -> VertexOutput {
     return out;
 }
 
-[[group(0), binding(0)]] var sampler_diffuse: sampler;
-[[group(0), binding(1)]] var texture: texture_2d<f32>;
+[[group(0), binding(0)]] var texture_sampler: sampler;
+[[group(0), binding(1)]] var texture_array: texture_2d_array<f32>;
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    let object_color: vec4<f32> =
-        textureSample(texture, sampler_diffuse, in.texture_coordinates);
+    let object_color: vec4<f32> = textureSample(
+        texture_array,
+        texture_sampler,
+        in.texture_coordinates.xy,
+        i32(in.texture_coordinates.z)
+    );
 
     let ambient_strength = 0.1;
     let ambient_color = light.color * ambient_strength;

@@ -16,43 +16,43 @@ pub const CROSSHAIR_VERTICES: &[Vertex] = &[
     // Crosshair
     Vertex {
         position: [-UI_SCALE_X * 8.0, UI_SCALE_Y * 8.0, 0.0],
-        texture_coordinates: [240.0 / 256.0, 0.0 / 256.0],
+        texture_coordinates: [240.0 / 256.0, 0.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
     },
     Vertex {
         position: [UI_SCALE_X * 8.0, UI_SCALE_Y * 8.0, 0.0],
-        texture_coordinates: [1.0, 0.0 / 256.0],
+        texture_coordinates: [1.0, 0.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
     },
     Vertex {
         position: [UI_SCALE_X * 8.0, -UI_SCALE_Y * 8.0, 0.0],
-        texture_coordinates: [1.0, 16.0 / 256.0],
+        texture_coordinates: [1.0, 16.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
     },
     Vertex {
         position: [-UI_SCALE_X * 8.0, -UI_SCALE_Y * 8.0, 0.0],
-        texture_coordinates: [240.0 / 256.0, 16.0 / 256.0],
+        texture_coordinates: [240.0 / 256.0, 16.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
     },
     // Hotbar
     Vertex {
         position: [-UI_SCALE_X * 91.0, -1.0 + UI_SCALE_Y * 22.0, 0.0],
-        texture_coordinates: [0.0 / 256.0, 0.0 / 256.0],
+        texture_coordinates: [0.0 / 256.0, 0.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
     },
     Vertex {
         position: [UI_SCALE_X * 91.0, -1.0 + UI_SCALE_Y * 22.0, 0.0],
-        texture_coordinates: [182.0 / 256.0, 0.0 / 256.0],
+        texture_coordinates: [182.0 / 256.0, 0.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
     },
     Vertex {
         position: [UI_SCALE_X * 91.0, -1.0, 0.0],
-        texture_coordinates: [182.0 / 256.0, 22.0 / 256.0],
+        texture_coordinates: [182.0 / 256.0, 22.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
     },
     Vertex {
         position: [-UI_SCALE_X * 91.0, -1.0, 0.0],
-        texture_coordinates: [0.0 / 256.0, 22.0 / 256.0],
+        texture_coordinates: [0.0 / 256.0, 22.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
     },
 ];
@@ -258,7 +258,7 @@ impl State {
         (swap_chain_descriptor, swap_chain)
     }
 
-    pub async fn new(window: &Window) -> Self {
+    pub async fn new(window: &Window) -> State {
         let window_size = window.inner_size();
 
         let (render_surface, render_adapter, render_device, render_queue) =
@@ -279,7 +279,7 @@ impl State {
 
         let ui_crosshair_vertex_buffer = render_device.create_buffer_init(&BufferInitDescriptor {
             label: Some("GUI crosshair vertex buffer"),
-            contents: bytemuck::cast_slice(CROSSHAIR_VERTICES),
+            contents: bytemuck::cast_slice(&CROSSHAIR_VERTICES),
             usage: wgpu::BufferUsage::VERTEX,
         });
         let ui_crosshair_index_buffer = render_device.create_buffer_init(&BufferInitDescriptor {
@@ -476,17 +476,14 @@ impl State {
 
             render_pass.set_pipeline(&self.world_state.render_pipeline);
 
+            let tm = &self.world_state.texture_manager;
+            render_pass.set_bind_group(0, tm.bind_group.as_ref().unwrap(), &[]);
             render_pass.set_bind_group(1, &self.world_state.uniform_bind_group, &[]);
             render_pass.set_bind_group(2, &self.world_state.light_bind_group, &[]);
 
-            // Set the texture
-            let texture_bind_group = &self.world_state.texture_bind_group;
-            render_pass.set_bind_group(0, texture_bind_group, &[]);
-
-            for (chunk_vertices, chunk_indices, index_count) in &self.world_state.chunk_buffers {
+            for (chunk_vertices, chunk_indices, _, index_count) in &self.world_state.chunk_buffers {
                 render_pass.set_vertex_buffer(0, chunk_vertices.slice(..));
                 render_pass.set_index_buffer(chunk_indices.slice(..), wgpu::IndexFormat::Uint16);
-
                 render_pass.draw_indexed(0..*index_count as u32, 0, 0..1);
                 triangle_count += index_count / 3;
             }

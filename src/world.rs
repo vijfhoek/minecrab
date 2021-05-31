@@ -26,7 +26,7 @@ impl World {
         Self { chunks }
     }
 
-    pub fn to_instances(&self) -> Vec<(Vec<Vertex>, Vec<u16>)> {
+    pub fn to_instances(&self) -> Vec<(Vec<Vertex>, Vec<u16>, Vec<Vec<(usize, usize, usize)>>)> {
         let instant = std::time::Instant::now();
         let mut instances = Vec::new();
 

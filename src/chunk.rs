@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, usize};
+use std::{collections::VecDeque, convert::TryInto, usize};
 
 use crate::{cube, quad::Quad, vertex::Vertex};
 use ahash::{AHashMap, AHashSet};
@@ -19,9 +19,9 @@ pub enum BlockType {
 }
 
 impl BlockType {
+    #[rustfmt::skip]
     pub const fn texture_indices(self) -> (usize, usize, usize, usize, usize, usize) {
-        #[rustfmt::skip]
-        let indices = match self {
+        match self {
             BlockType::Cobblestone => ( 0,  0,  0,  0,  0,  0),
             BlockType::Dirt        => ( 1,  1,  1,  1,  1,  1),
             BlockType::Stone       => ( 2,  2,  2,  2,  2,  2),
@@ -30,10 +30,22 @@ impl BlockType {
             BlockType::Sand        => ( 6,  6,  6,  6,  6,  6),
             BlockType::Gravel      => ( 7,  7,  7,  7,  7,  7),
             BlockType::Water       => ( 8,  8,  8,  8,  8,  8), // up to 71
-        };
-        indices
+        }
+    }
+
+    pub const fn is_transparent(self) -> bool {
+        matches!(self, BlockType::Water)
     }
 }
+
+pub type FaceFlags = usize;
+pub const FACE_NONE: FaceFlags = 0;
+pub const FACE_LEFT: FaceFlags = 1;
+pub const FACE_RIGHT: FaceFlags = 2;
+pub const FACE_BOTTOM: FaceFlags = 4;
+pub const FACE_TOP: FaceFlags = 8;
+pub const FACE_BACK: FaceFlags = 16;
+pub const FACE_FRONT: FaceFlags = 32;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Block {
@@ -116,9 +128,9 @@ impl Chunk {
                     });
                 }
                 if chunk_y < 128 / CHUNK_SIZE as i32 {
-                    for y in 0..CHUNK_SIZE {
-                        if blocks[y][z][x].is_none() {
-                            blocks[y][z][x] = Some(Block {
+                    for layer in blocks.iter_mut() {
+                        if layer[z][x].is_none() {
+                            layer[z][x] = Some(Block {
                                 block_type: BlockType::Water,
                             });
                         }
@@ -133,25 +145,55 @@ impl Chunk {
         }
     }
 
-    fn check_visible(&self, x: usize, y: usize, z: usize) -> bool {
-        self.get_block(x - 1, y - 1, z - 1).is_some()
-            && self.get_block(x + 1, y - 1, z - 1).is_some()
-            && self.get_block(x - 1, y + 1, z - 1).is_some()
-            && self.get_block(x + 1, y + 1, z - 1).is_some()
-            && self.get_block(x - 1, y - 1, z + 1).is_some()
-            && self.get_block(x + 1, y - 1, z + 1).is_some()
-            && self.get_block(x - 1, y + 1, z + 1).is_some()
-            && self.get_block(x + 1, y + 1, z + 1).is_some()
+    #[rustfmt::skip]
+    fn check_visible_faces(&self, x: usize, y: usize, z: usize) -> FaceFlags {
+        let mut visible_faces = FACE_NONE;
+        let transparent = self.blocks[y][z][x].unwrap().block_type.is_transparent();
+
+        if x == 0 || self.blocks[y][z][x - 1].is_none()
+            || transparent != self.blocks[y][z][x - 1].unwrap().block_type.is_transparent()
+        {
+            visible_faces |= FACE_LEFT;
+        }
+        if x == CHUNK_SIZE - 1 || self.blocks[y][z][x + 1].is_none()
+            || transparent != self.blocks[y][z][x + 1].unwrap().block_type.is_transparent()
+        {
+            visible_faces |= FACE_RIGHT;
+        }
+
+        if y == 0 || self.blocks[y - 1][z][x].is_none()
+            || transparent != self.blocks[y - 1][z][x].unwrap().block_type.is_transparent()
+        {
+            visible_faces |= FACE_BOTTOM;
+        }
+        if y == CHUNK_SIZE - 1 || self.blocks[y + 1][z][x].is_none()
+            || transparent != self.blocks[y + 1][z][x].unwrap().block_type.is_transparent()
+        {
+            visible_faces |= FACE_TOP;
+        }
+
+        if z == 0 || self.blocks[y][z - 1][x].is_none()
+            || transparent != self.blocks[y][z - 1][x].unwrap().block_type.is_transparent()
+        {
+            visible_faces |= FACE_BACK;
+        }
+        if z == CHUNK_SIZE - 1 || self.blocks[y][z + 1][x].is_none()
+            || transparent != self.blocks[y][z + 1][x].unwrap().block_type.is_transparent()
+        {
+            visible_faces |= FACE_FRONT;
+        }
+
+        visible_faces
     }
 
     fn cull_layer(
         &self,
         y: usize,
     ) -> (
-        AHashMap<(usize, usize), BlockType>,
+        AHashMap<(usize, usize), (BlockType, FaceFlags)>,
         VecDeque<(usize, usize)>,
     ) {
-        let mut output = AHashMap::new();
+        let mut culled = AHashMap::new();
         let mut queue = VecDeque::new();
 
         let y_blocks = &self.blocks[y];
@@ -159,26 +201,28 @@ impl Chunk {
             for (x, block) in z_blocks.iter().enumerate() {
                 if let Some(block) = block {
                     // Don't add the block if it's not visible
-                    if self.check_visible(x, y, z) {
+                    let visible_faces = self.check_visible_faces(x, y, z);
+                    if visible_faces == FACE_NONE {
                         continue;
                     }
 
-                    output.insert((x, z), block.block_type);
+                    culled.insert((x, z), (block.block_type, visible_faces));
                     queue.push_back((x, z));
                 }
             }
         }
 
-        (output, queue)
+        (culled, queue)
     }
 
     fn layer_to_quads(
+        &self,
         y: usize,
         offset: Vector3<i32>,
-        culled: AHashMap<(usize, usize), BlockType>,
+        culled: AHashMap<(usize, usize), (BlockType, FaceFlags)>,
         queue: &mut VecDeque<(usize, usize)>,
-    ) -> Vec<(BlockType, i32, Vector3<i32>, Quad)> {
-        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad)> = Vec::new();
+    ) -> Vec<(BlockType, i32, Vector3<i32>, Quad, bool, FaceFlags)> {
+        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad, bool, FaceFlags)> = Vec::new();
         let mut visited = AHashSet::new();
         while let Some((x, z)) = queue.pop_front() {
             if visited.contains(&(x, z)) {
@@ -186,43 +230,73 @@ impl Chunk {
             }
             visited.insert((x, z));
 
-            if let Some(&block_type) = &culled.get(&(x, z)) {
-                if block_type == BlockType::Water {
+            if let Some(&(block_type, visible_faces)) = &culled.get(&(x, z)) {
+                let mut quad_faces = visible_faces;
+
+                if self.highlighted == Some(Vector3::new(x, y, z)) {
                     let quad = Quad::new(x as i32, z as i32, 1, 1);
-                    quads.push((block_type, y as i32, offset, quad));
+                    quads.push((block_type, y as i32, offset, quad, true, quad_faces));
                     continue;
                 }
 
-                // Extend horizontally
+                if block_type == BlockType::Water {
+                    let quad = Quad::new(x as i32, z as i32, 1, 1);
+                    quads.push((block_type, y as i32, offset, quad, false, quad_faces));
+                    continue;
+                }
+
+                // Extend along the X axis
                 let mut xmax = x + 1;
                 for x_ in x..CHUNK_SIZE {
                     xmax = x_ + 1;
-                    if culled.get(&(x_ + 1, z)) != Some(&block_type)
-                        || visited.contains(&(x_ + 1, z))
+
+                    if visited.contains(&(xmax, z))
+                        || self.highlighted == Some(Vector3::new(xmax, y, z))
                     {
                         break;
                     }
-                    visited.insert((x_ + 1, z));
+
+                    if let Some(&(block_type_, visible_faces_)) = culled.get(&(xmax, z)) {
+                        quad_faces |= visible_faces_;
+                        if block_type != block_type_ {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+
+                    visited.insert((xmax, z));
                 }
 
-                // Extend vertically
+                // Extend along the Z axis
                 let mut zmax = z + 1;
                 'z: for z_ in z..CHUNK_SIZE {
                     zmax = z_ + 1;
+
                     for x_ in x..xmax {
-                        if culled.get(&(x_, z_ + 1)) != Some(&block_type)
-                            || visited.contains(&(x_, z_ + 1))
+                        if visited.contains(&(x_, zmax))
+                            || self.highlighted == Some(Vector3::new(x_, y, zmax))
                         {
                             break 'z;
                         }
+
+                        if let Some(&(block_type_, visible_faces_)) = culled.get(&(x_, zmax)) {
+                            quad_faces |= visible_faces_;
+                            if block_type != block_type_ {
+                                break 'z;
+                            }
+                        } else {
+                            break 'z;
+                        }
                     }
+
                     for x_ in x..xmax {
-                        visited.insert((x_, z_ + 1));
+                        visited.insert((x_, zmax));
                     }
                 }
 
                 let quad = Quad::new(x as i32, z as i32, (xmax - x) as i32, (zmax - z) as i32);
-                quads.push((block_type, y as i32, offset, quad));
+                quads.push((block_type, y as i32, offset, quad, false, quad_faces));
             }
         }
 
@@ -230,28 +304,37 @@ impl Chunk {
     }
 
     fn quads_to_geometry(
-        quads: Vec<(BlockType, i32, Vector3<i32>, Quad)>,
+        quads: Vec<(BlockType, i32, Vector3<i32>, Quad, bool, FaceFlags)>,
     ) -> (Vec<Vertex>, Vec<u16>) {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
-        for (quad_index, (block_type, y, offset, quad)) in quads.iter().enumerate() {
+        for (block_type, y, offset, quad, highlighted, visible_faces) in quads {
             let texture_indices = block_type.texture_indices();
-            vertices.extend(&cube::vertices(quad, *y, 1.0, *offset, texture_indices));
 
-            for index in cube::INDICES {
-                indices.push(index + quad_index as u16 * 24);
-            }
+            let (quad_vertices, quad_indices) = &cube::vertices(
+                &quad,
+                y,
+                1.0,
+                offset,
+                texture_indices,
+                highlighted,
+                visible_faces,
+                vertices.len().try_into().unwrap(),
+            );
+
+            vertices.extend(quad_vertices);
+            indices.extend(quad_indices);
         }
 
         (vertices, indices)
     }
 
     pub fn to_geometry(&self, offset: Vector3<i32>) -> (Vec<Vertex>, Vec<u16>) {
-        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad)> = Vec::new();
+        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad, bool, FaceFlags)> = Vec::new();
 
         for y in 0..CHUNK_SIZE {
             let (culled, mut queue) = self.cull_layer(y);
-            let mut layer_quads = Self::layer_to_quads(y, offset, culled, &mut queue);
+            let mut layer_quads = self.layer_to_quads(y, offset, culled, &mut queue);
             quads.append(&mut layer_quads);
         }
 

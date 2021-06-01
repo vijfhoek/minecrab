@@ -1,10 +1,13 @@
 use std::time::{Duration, Instant};
 
+use ahash::AHashMap;
+use cgmath::Vector3;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use winit::dpi::PhysicalSize;
 
 use crate::{
     camera::{Camera, Projection},
+    chunk::CHUNK_SIZE,
     texture::{Texture, TextureManager},
     time::Time,
     uniforms::Uniforms,
@@ -24,9 +27,12 @@ pub struct WorldState {
     pub time_bind_group: wgpu::BindGroup,
     pub world: World,
 
-    pub chunk_buffers: Vec<(wgpu::Buffer, wgpu::Buffer, usize)>,
+    pub chunk_buffers: AHashMap<Vector3<usize>, (wgpu::Buffer, wgpu::Buffer, usize)>,
     time: Time,
     time_buffer: wgpu::Buffer,
+    wireframe: bool,
+    shader: wgpu::ShaderModule,
+    render_pipeline_layout: wgpu::PipelineLayout,
 }
 
 impl WorldState {
@@ -148,28 +154,13 @@ impl WorldState {
     fn create_render_pipeline(
         render_device: &wgpu::Device,
         swap_chain_descriptor: &wgpu::SwapChainDescriptor,
-        bind_group_layouts: &[&wgpu::BindGroupLayout],
+        shader: &wgpu::ShaderModule,
+        pipeline_layout: &wgpu::PipelineLayout,
+        wireframe: bool,
     ) -> wgpu::RenderPipeline {
-        let shader = render_device.create_shader_module(
-            &(wgpu::ShaderModuleDescriptor {
-                label: Some("shader"),
-                flags: wgpu::ShaderFlags::all(),
-                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/world.wgsl").into()),
-            }),
-        );
-
-        let render_pipeline_layout =
-            render_device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("render_pipeline_layout"),
-                bind_group_layouts,
-                push_constant_ranges: &[],
-            });
-
-        let wireframe = false;
-
         render_device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
+            layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "main",
@@ -207,29 +198,74 @@ impl WorldState {
         })
     }
 
-    pub fn update_chunk(&mut self, render_device: &wgpu::Device) {
+    pub fn update_world_geometry(&mut self, render_device: &wgpu::Device) {
         let instant = Instant::now();
 
         let world_geometry = self.world.to_geometry();
         self.chunk_buffers.clear();
-        for (chunk_vertices, chunk_indices) in world_geometry {
-            self.chunk_buffers.push((
-                render_device.create_buffer_init(&BufferInitDescriptor {
-                    label: None,
-                    contents: &bytemuck::cast_slice(&chunk_vertices),
-                    usage: wgpu::BufferUsage::VERTEX,
-                }),
-                render_device.create_buffer_init(&BufferInitDescriptor {
-                    label: None,
-                    contents: &bytemuck::cast_slice(&chunk_indices),
-                    usage: wgpu::BufferUsage::INDEX,
-                }),
-                chunk_indices.len(),
-            ));
+        for (chunk_position, chunk_vertices, chunk_indices) in world_geometry {
+            self.chunk_buffers.insert(
+                chunk_position,
+                (
+                    render_device.create_buffer_init(&BufferInitDescriptor {
+                        label: None,
+                        contents: &bytemuck::cast_slice(&chunk_vertices),
+                        usage: wgpu::BufferUsage::VERTEX,
+                    }),
+                    render_device.create_buffer_init(&BufferInitDescriptor {
+                        label: None,
+                        contents: &bytemuck::cast_slice(&chunk_indices),
+                        usage: wgpu::BufferUsage::INDEX,
+                    }),
+                    chunk_indices.len(),
+                ),
+            );
         }
 
         let elapsed = instant.elapsed();
         println!("World update took {:?}", elapsed);
+    }
+
+    pub fn update_chunk_geometry(
+        &mut self,
+        render_device: &wgpu::Device,
+        chunk_position: Vector3<usize>,
+    ) {
+        let chunk = &mut self.world.chunks[chunk_position.y][chunk_position.z][chunk_position.x];
+        let offset = chunk_position.map(|f| (f * CHUNK_SIZE) as i32);
+        let (vertices, indices) = chunk.to_geometry(offset);
+
+        self.chunk_buffers.insert(
+            chunk_position,
+            (
+                render_device.create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: &bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsage::VERTEX,
+                }),
+                render_device.create_buffer_init(&BufferInitDescriptor {
+                    label: None,
+                    contents: &bytemuck::cast_slice(&indices),
+                    usage: wgpu::BufferUsage::INDEX,
+                }),
+                indices.len(),
+            ),
+        );
+    }
+
+    pub fn toggle_wireframe(
+        &mut self,
+        render_device: &wgpu::Device,
+        swap_chain_descriptor: &wgpu::SwapChainDescriptor,
+    ) {
+        self.wireframe = !self.wireframe;
+        self.render_pipeline = Self::create_render_pipeline(
+            render_device,
+            swap_chain_descriptor,
+            &self.shader,
+            &self.render_pipeline_layout,
+            self.wireframe,
+        )
     }
 
     pub fn new(
@@ -248,14 +284,31 @@ impl WorldState {
 
         let (time, time_buffer, time_layout, time_bind_group) = Self::create_time(&render_device);
 
+        let shader = render_device.create_shader_module(
+            &(wgpu::ShaderModuleDescriptor {
+                label: Some("shader"),
+                flags: wgpu::ShaderFlags::all(),
+                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/world.wgsl").into()),
+            }),
+        );
+
+        let render_pipeline_layout =
+            render_device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("render_pipeline_layout"),
+                push_constant_ranges: &[],
+                bind_group_layouts: &[
+                    &texture_manager.bind_group_layout,
+                    &world_uniform_layout,
+                    &time_layout,
+                ],
+            });
+
         let render_pipeline = Self::create_render_pipeline(
             &render_device,
             &swap_chain_descriptor,
-            &[
-                &texture_manager.bind_group_layout,
-                &world_uniform_layout,
-                &time_layout,
-            ],
+            &shader,
+            &render_pipeline_layout,
+            false,
         );
 
         let depth_texture =
@@ -270,16 +323,19 @@ impl WorldState {
             camera,
             projection,
             depth_texture,
+            shader,
+            render_pipeline_layout,
 
             time,
             time_buffer,
             time_bind_group,
 
             world,
-            chunk_buffers: Vec::new(),
+            chunk_buffers: AHashMap::new(),
+            wireframe: false,
         };
 
-        world_state.update_chunk(render_device);
+        world_state.update_world_geometry(render_device);
 
         world_state
     }

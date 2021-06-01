@@ -6,6 +6,7 @@ pub struct Vertex {
     pub position: [f32; 3],
     pub texture_coordinates: [f32; 3],
     pub normal: [f32; 3],
+    pub highlighted: i32,
 }
 
 impl Vertex {
@@ -28,6 +29,11 @@ impl Vertex {
                     offset: 24,
                     shader_location: 2,
                     format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: 36,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Sint32,
                 },
             ],
         }

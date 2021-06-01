@@ -2,7 +2,7 @@ use crate::{chunk::Chunk, vertex::Vertex};
 use cgmath::Vector3;
 
 pub struct World {
-    chunks: Vec<Vec<Vec<Chunk>>>,
+    pub chunks: Vec<Vec<Vec<Chunk>>>,
 }
 
 const WORLD_SIZE: usize = 16;
@@ -26,7 +26,7 @@ impl World {
         Self { chunks }
     }
 
-    pub fn to_geometry(&self) -> Vec<(Vec<Vertex>, Vec<u16>)> {
+    pub fn to_geometry(&self) -> Vec<(Vector3<usize>, Vec<Vertex>, Vec<u16>)> {
         let instant = std::time::Instant::now();
         let mut geometry = Vec::new();
 
@@ -34,7 +34,8 @@ impl World {
             for (z, chunks_z) in chunks_y.iter().enumerate() {
                 for (x, chunk) in chunks_z.iter().enumerate() {
                     let offset = Vector3::new(x as i32 * 16, y as i32 * 16, z as i32 * 16);
-                    geometry.push(chunk.to_geometry(offset));
+                    let (vertices, indices) = chunk.to_geometry(offset);
+                    geometry.push((Vector3::new(x, y, z), vertices, indices));
                 }
             }
         }

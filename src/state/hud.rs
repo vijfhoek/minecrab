@@ -203,42 +203,50 @@ pub const CROSSHAIR_VERTICES: &[Vertex] = &[
         position: [-UI_SCALE_X * 8.0, UI_SCALE_Y * 8.0, 0.0],
         texture_coordinates: [240.0 / 256.0, 0.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
+        highlighted: 0,
     },
     Vertex {
         position: [UI_SCALE_X * 8.0, UI_SCALE_Y * 8.0, 0.0],
         texture_coordinates: [1.0, 0.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
+        highlighted: 0,
     },
     Vertex {
         position: [UI_SCALE_X * 8.0, -UI_SCALE_Y * 8.0, 0.0],
         texture_coordinates: [1.0, 16.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
+        highlighted: 0,
     },
     Vertex {
         position: [-UI_SCALE_X * 8.0, -UI_SCALE_Y * 8.0, 0.0],
         texture_coordinates: [240.0 / 256.0, 16.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
+        highlighted: 0,
     },
     // Hotbar
     Vertex {
         position: [-UI_SCALE_X * 91.0, -1.0 + UI_SCALE_Y * 22.0, 0.0],
         texture_coordinates: [0.0 / 256.0, 0.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
+        highlighted: 0,
     },
     Vertex {
         position: [UI_SCALE_X * 91.0, -1.0 + UI_SCALE_Y * 22.0, 0.0],
         texture_coordinates: [182.0 / 256.0, 0.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
+        highlighted: 0,
     },
     Vertex {
         position: [UI_SCALE_X * 91.0, -1.0, 0.0],
         texture_coordinates: [182.0 / 256.0, 22.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
+        highlighted: 0,
     },
     Vertex {
         position: [-UI_SCALE_X * 91.0, -1.0, 0.0],
         texture_coordinates: [0.0 / 256.0, 22.0 / 256.0, 0.0],
         normal: [0.0, 0.0, 0.0],
+        highlighted: 0,
     },
 ];
 

@@ -3,7 +3,7 @@ mod world;
 
 use std::time::Duration;
 
-use cgmath::{InnerSpace, Rad, Vector3};
+use cgmath::{EuclideanSpace, InnerSpace, Rad, Vector3, Zero};
 use winit::{
     event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
     window::Window,
@@ -11,6 +11,8 @@ use winit::{
 
 use hud::HudState;
 use world::WorldState;
+
+use crate::chunk::{Block, BlockType};
 
 pub struct State {
     pub window_size: winit::dpi::PhysicalSize<u32>,
@@ -141,6 +143,9 @@ impl State {
             VirtualKeyCode::D => self.right_speed += amount,
             VirtualKeyCode::LControl => self.up_speed -= amount,
             VirtualKeyCode::Space => self.up_speed += amount,
+            VirtualKeyCode::F1 if state == &ElementState::Pressed => self
+                .world_state
+                .toggle_wireframe(&self.render_device, &self.swap_chain_descriptor),
             _ => (),
         }
     }
@@ -158,15 +163,19 @@ impl State {
     }
 
     fn update_aim(&mut self) {
-        // let camera = &self.world_state.camera;
-        // let chunk = &mut self.world_state.chunk;
-        // let position = chunk
-        //     .raycast(camera.position.to_vec(), camera.direction())
-        //     .map(|(position, _)| position);
-        // if position != chunk.highlighted {
-        //     chunk.highlighted = position;
-        //     self.world_state.update_chunk(&self.render_queue);
-        // }
+        let camera = &self.world_state.camera;
+        let chunk = &mut self.world_state.world.chunks[0][0][0];
+
+        let position = chunk
+            .raycast(camera.position.to_vec(), camera.direction())
+            .map(|(position, _)| position);
+
+        if position != chunk.highlighted {
+            chunk.highlighted = position;
+            println!("aiming at {:?}", position);
+            self.world_state
+                .update_chunk_geometry(&self.render_device, Vector3::zero());
+        }
     }
 
     fn input_mouse(&mut self, dx: f64, dy: f64) {
@@ -183,32 +192,34 @@ impl State {
                 ..
             }) => self.input_keyboard(key, state),
 
-            // DeviceEvent::Button {
-            //     button,
-            //     state: ElementState::Pressed,
-            // } if self.mouse_grabbed => {
-            //     let camera = &self.world_state.camera;
+            DeviceEvent::Button {
+                button,
+                state: ElementState::Pressed,
+            } if self.mouse_grabbed => {
+                let camera = &self.world_state.camera;
+                let chunk = &mut self.world_state.world.chunks[0][0][0];
 
-            //     // if let Some((pos, axis)) = self
-            //     //     .world_state
-            //     //     .chunk
-            //     //     .raycast(camera.position.to_vec(), camera.direction())
-            //     // {
-            //     //     if *button == 1 {
-            //     //         self.world_state.chunk.blocks[pos.y][pos.z][pos.x].take();
-            //     //         dbg!(&pos);
-            //     //         self.world_state.update_chunk(&self.render_queue);
-            //     //     } else if *button == 3 {
-            //     //         let new_pos = pos.map(|x| x as i32) - axis;
-            //     //         dbg!(&axis, &new_pos);
-            //     //         self.world_state.chunk.blocks[new_pos.y as usize][new_pos.z as usize]
-            //     //             [new_pos.x as usize] = Some(Block {
-            //     //             block_type: BlockType::Cobblestone,
-            //     //         });
-            //     //         self.world_state.update_chunk(&self.render_queue);
-            //     //     }
-            //     // }
-            // }
+                if let Some((pos, axis)) =
+                    chunk.raycast(camera.position.to_vec(), camera.direction())
+                {
+                    if *button == 1 {
+                        chunk.blocks[pos.y][pos.z][pos.x].take();
+                        dbg!(&pos);
+                        self.world_state
+                            .update_chunk_geometry(&self.render_device, Vector3::zero());
+                    } else if *button == 3 {
+                        let new_pos = pos.map(|x| x as i32) - axis;
+                        dbg!(&axis, &new_pos);
+                        chunk.blocks[new_pos.y as usize][new_pos.z as usize][new_pos.x as usize] =
+                            Some(Block {
+                                block_type: BlockType::Cobblestone,
+                            });
+
+                        self.world_state
+                            .update_chunk_geometry(&self.render_device, Vector3::zero());
+                    }
+                }
+            }
             DeviceEvent::MouseMotion { delta: (dx, dy) } => self.input_mouse(*dx, *dy),
             _ => (),
         }
@@ -220,13 +231,13 @@ impl State {
         let (yaw_sin, yaw_cos) = self.world_state.camera.yaw.0.sin_cos();
 
         let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        self.world_state.camera.position += forward * self.forward_speed * 15.0 * dt_secs;
+        self.world_state.camera.position += forward * self.forward_speed * 30.0 * dt_secs;
 
         let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        self.world_state.camera.position += right * self.right_speed * 15.0 * dt_secs;
+        self.world_state.camera.position += right * self.right_speed * 30.0 * dt_secs;
 
         let up = Vector3::new(0.0, 1.0, 0.0).normalize();
-        self.world_state.camera.position += up * self.up_speed * 15.0 * dt_secs;
+        self.world_state.camera.position += up * self.up_speed * 30.0 * dt_secs;
 
         self.world_state.update(dt, &self.render_queue);
 
@@ -285,7 +296,9 @@ impl State {
             render_pass.set_bind_group(1, &self.world_state.uniform_bind_group, &[]);
             render_pass.set_bind_group(2, &self.world_state.time_bind_group, &[]);
 
-            for (chunk_vertices, chunk_indices, index_count) in &self.world_state.chunk_buffers {
+            for (chunk_vertices, chunk_indices, index_count) in
+                self.world_state.chunk_buffers.values()
+            {
                 render_pass.set_vertex_buffer(0, chunk_vertices.slice(..));
                 render_pass.set_index_buffer(chunk_indices.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..*index_count as u32, 0, 0..1);

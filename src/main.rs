@@ -1,10 +1,10 @@
 mod camera;
 mod chunk;
 mod cube;
-mod time;
 mod quad;
 mod state;
 mod texture;
+mod time;
 mod uniforms;
 mod vertex;
 mod world;
@@ -100,8 +100,8 @@ fn main() {
                     let fps_min = 1_000_000 / frametime_max.as_micros();
 
                     println!(
-                        "{} frames | frametime avg={:?} min={:?} max={:?} | fps avg={} min={} max={} | {} tris",
-                        frames, frametime, frametime_min, frametime_max, fps, fps_min, fps_max, triangle_count,
+                        "{:>4} frames | frametime avg={:>5.2}ms min={:>5.2}ms max={:>5.2}ms | fps avg={:>4} min={:>4} max={:>4} | {:>8} tris",
+                        frames, frametime.as_secs_f32() * 1000.0, frametime_min.as_secs_f32() * 1000.0, frametime_max.as_secs_f32() * 1000.0, fps, fps_min, fps_max, triangle_count,
                     );
 
                     elapsed = Duration::from_secs(0);

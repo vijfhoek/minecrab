@@ -9,6 +9,7 @@ mod uniforms;
 mod vertex;
 mod world;
 mod render_context;
+mod text_renderer;
 
 use std::time::{Duration, Instant};
 use wgpu::SwapChainError;

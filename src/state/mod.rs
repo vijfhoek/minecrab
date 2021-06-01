@@ -3,6 +3,7 @@ pub mod world_state;
 
 use std::time::Duration;
 
+use cgmath::EuclideanSpace;
 use winit::{
     dpi::PhysicalSize,
     event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
@@ -157,6 +158,10 @@ impl State {
 
     pub fn update(&mut self, dt: Duration) {
         self.world_state.update(dt, &self.render_context);
+        self.hud_state.update(
+            &self.render_context,
+            &self.world_state.camera.position.to_vec(),
+        );
     }
 
     pub fn render(&mut self) -> anyhow::Result<usize> {

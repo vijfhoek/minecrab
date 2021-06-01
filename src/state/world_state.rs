@@ -50,7 +50,7 @@ pub struct WorldState {
 
 impl WorldState {
     fn create_textures(render_context: &RenderContext) -> TextureManager {
-        let mut texture_manager = TextureManager::new(&render_context.device);
+        let mut texture_manager = TextureManager::new(&render_context);
         texture_manager.load_all(render_context).unwrap();
         texture_manager
     }

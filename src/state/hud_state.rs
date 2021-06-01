@@ -1,9 +1,17 @@
+use std::time::{Duration, Instant};
+
+use cgmath::Vector3;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     CommandEncoder, Device, Queue, SwapChainDescriptor, SwapChainTexture,
 };
 
-use crate::{render_context::RenderContext, texture::Texture, vertex::Vertex};
+use crate::{
+    render_context::RenderContext,
+    text_renderer::{self, TextRenderer},
+    texture::Texture,
+    vertex::Vertex,
+};
 
 const UI_SCALE_X: f32 = 0.0045;
 const UI_SCALE_Y: f32 = 0.008;
@@ -13,6 +21,20 @@ pub struct HudState {
     render_pipeline: wgpu::RenderPipeline,
     crosshair_vertex_buffer: wgpu::Buffer,
     crosshair_index_buffer: wgpu::Buffer,
+
+    text_renderer: TextRenderer,
+
+    fps_vertex_buffer: wgpu::Buffer,
+    fps_index_buffer: wgpu::Buffer,
+    fps_index_count: usize,
+    fps_instant: Instant,
+    fps_frames: u32,
+    fps_elapsed: Duration,
+
+    coordinates_vertex_buffer: wgpu::Buffer,
+    coordinates_index_buffer: wgpu::Buffer,
+    coordinates_index_count: usize,
+    coordinates_last: Vector3<f32>,
 }
 
 impl HudState {
@@ -40,11 +62,66 @@ impl HudState {
                     usage: wgpu::BufferUsage::INDEX,
                 });
 
+        let text_renderer = TextRenderer::new(render_context).unwrap();
+        let (fps_vertex_buffer, fps_index_buffer, fps_index_count) =
+            text_renderer.string_to_buffers(&render_context, -0.98, 0.97, "");
+        let (coordinates_vertex_buffer, coordinates_index_buffer, coordinates_index_count) =
+            text_renderer.string_to_buffers(&render_context, -0.98, 0.97 - text_renderer::DY, "");
+
         Self {
             texture_bind_group,
             render_pipeline,
             crosshair_vertex_buffer,
             crosshair_index_buffer,
+            text_renderer,
+
+            fps_vertex_buffer,
+            fps_index_buffer,
+            fps_index_count,
+            fps_instant: Instant::now(),
+            fps_frames: 0,
+            fps_elapsed: Duration::from_secs(0),
+
+            coordinates_vertex_buffer,
+            coordinates_index_buffer,
+            coordinates_index_count,
+            coordinates_last: Vector3::new(0.0, 0.0, 0.0),
+        }
+    }
+
+    pub fn update(&mut self, render_context: &RenderContext, position: &Vector3<f32>) {
+        let elapsed = self.fps_instant.elapsed();
+        self.fps_instant = Instant::now();
+        self.fps_elapsed += elapsed;
+        self.fps_frames += 1;
+
+        if self.fps_elapsed.as_millis() >= 500 {
+            let frametime = self.fps_elapsed / self.fps_frames;
+            let fps = 1.0 / frametime.as_secs_f32();
+
+            let string = format!("{:<5.0} fps", fps);
+            let (vertices, indices, index_count) =
+                self.text_renderer
+                    .string_to_buffers(render_context, -0.98, 0.97, &string);
+            self.fps_vertex_buffer = vertices;
+            self.fps_index_buffer = indices;
+            self.fps_index_count = index_count;
+
+            self.fps_elapsed = Duration::from_secs(0);
+            self.fps_frames = 0;
+        }
+
+        if position != &self.coordinates_last {
+            let string = format!("({:.1},{:.1},{:.1})", position.x, position.y, position.z,);
+            let (vertices, indices, index_count) = self.text_renderer.string_to_buffers(
+                render_context,
+                -0.98,
+                0.97 - text_renderer::DY * 1.3,
+                &string,
+            );
+            self.coordinates_vertex_buffer = vertices;
+            self.coordinates_index_buffer = indices;
+            self.coordinates_index_count = index_count;
         }
     }
 
@@ -75,6 +152,19 @@ impl HudState {
 
         render_pass.set_bind_group(0, &self.texture_bind_group, &[]);
         render_pass.draw_indexed(0..CROSSHAIR_INDICES.len() as u32, 0, 0..1);
+
+        render_pass.set_vertex_buffer(0, self.fps_vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.fps_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.set_bind_group(0, &self.text_renderer.bind_group, &[]);
+        render_pass.draw_indexed(0..self.fps_index_count as u32, 0, 0..1);
+
+        render_pass.set_vertex_buffer(0, self.coordinates_vertex_buffer.slice(..));
+        render_pass.set_index_buffer(
+            self.coordinates_index_buffer.slice(..),
+            wgpu::IndexFormat::Uint16,
+        );
+        render_pass.set_bind_group(0, &self.text_renderer.bind_group, &[]);
+        render_pass.draw_indexed(0..self.coordinates_index_count as u32, 0, 0..1);
 
         Ok(CROSSHAIR_INDICES.len() / 3)
     }

@@ -17,16 +17,16 @@ use crate::{
     render_context::RenderContext,
     texture::{Texture, TextureManager},
     time::Time,
-    uniforms::Uniforms,
-    vertex::Vertex,
+    vertex::BlockVertex,
+    view::View,
     world::World,
 };
 
 pub struct WorldState {
     pub render_pipeline: wgpu::RenderPipeline,
-    pub uniforms: Uniforms,
-    pub uniform_buffer: wgpu::Buffer,
-    pub uniform_bind_group: wgpu::BindGroup,
+    pub view: View,
+    pub view_buffer: wgpu::Buffer,
+    pub view_bind_group: wgpu::BindGroup,
     pub texture_manager: TextureManager,
     pub camera: Camera,
     pub projection: Projection,
@@ -76,28 +76,23 @@ impl WorldState {
         (camera, projection)
     }
 
-    fn create_uniforms(
+    fn create_view(
         camera: &Camera,
         projection: &Projection,
         render_context: &RenderContext,
-    ) -> (
-        Uniforms,
-        wgpu::Buffer,
-        wgpu::BindGroupLayout,
-        wgpu::BindGroup,
-    ) {
-        let mut uniforms = Uniforms::new();
-        uniforms.update_view_projection(camera, projection);
+    ) -> (View, wgpu::Buffer, wgpu::BindGroupLayout, wgpu::BindGroup) {
+        let mut view = View::new();
+        view.update_view_projection(camera, projection);
 
-        let uniform_buffer = render_context
+        let view_buffer = render_context
             .device
             .create_buffer_init(&BufferInitDescriptor {
-                label: Some("uniform_buffer"),
-                contents: bytemuck::cast_slice(&[uniforms]),
+                label: Some("view_buffer"),
+                contents: bytemuck::cast_slice(&[view]),
                 usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             });
 
-        let uniform_bind_group_layout =
+        let view_bind_group_layout =
             render_context
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -111,27 +106,21 @@ impl WorldState {
                         },
                         count: None,
                     }],
-                    label: Some("uniform_bind_group_layout"),
+                    label: Some("view_bind_group_layout"),
                 });
 
-        let uniform_bind_group =
-            render_context
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: &uniform_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: uniform_buffer.as_entire_binding(),
-                    }],
-                    label: Some("uniform_bind_group"),
-                });
+        let view_bind_group = render_context
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &view_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: view_buffer.as_entire_binding(),
+                }],
+                label: Some("view_bind_group"),
+            });
 
-        (
-            uniforms,
-            uniform_buffer,
-            uniform_bind_group_layout,
-            uniform_bind_group,
-        )
+        (view, view_buffer, view_bind_group_layout, view_bind_group)
     }
 
     fn create_time(
@@ -192,7 +181,7 @@ impl WorldState {
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: "main",
-                    buffers: &[Vertex::desc()],
+                    buffers: &[BlockVertex::descriptor()],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
@@ -309,8 +298,8 @@ impl WorldState {
 
         let (camera, projection) = Self::create_camera(render_context);
 
-        let (uniforms, uniform_buffer, world_uniform_layout, uniform_bind_group) =
-            Self::create_uniforms(&camera, &projection, render_context);
+        let (view, view_buffer, view_bind_group_layout, view_bind_group) =
+            Self::create_view(&camera, &projection, render_context);
 
         let (time, time_buffer, time_layout, time_bind_group) = Self::create_time(render_context);
 
@@ -330,7 +319,7 @@ impl WorldState {
                     push_constant_ranges: &[],
                     bind_group_layouts: &[
                         &texture_manager.bind_group_layout,
-                        &world_uniform_layout,
+                        &view_bind_group_layout,
                         &time_layout,
                     ],
                 });
@@ -342,9 +331,9 @@ impl WorldState {
 
         let mut world_state = Self {
             render_pipeline,
-            uniforms,
-            uniform_buffer,
-            uniform_bind_group,
+            view,
+            view_buffer,
+            view_bind_group,
             texture_manager,
             camera,
             projection,
@@ -406,7 +395,7 @@ impl WorldState {
 
         let tm = &self.texture_manager;
         render_pass.set_bind_group(0, tm.bind_group.as_ref().unwrap(), &[]);
-        render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.view_bind_group, &[]);
         render_pass.set_bind_group(2, &self.time_bind_group, &[]);
 
         let camera_pos = self.camera.position.to_vec();
@@ -556,13 +545,11 @@ impl WorldState {
         self.update_position(dt);
         self.update_aim(render_context);
 
-        self.uniforms
+        self.view
             .update_view_projection(&self.camera, &self.projection);
-        render_context.queue.write_buffer(
-            &self.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[self.uniforms]),
-        );
+        render_context
+            .queue
+            .write_buffer(&self.view_buffer, 0, bytemuck::cast_slice(&[self.view]));
 
         self.time.time += dt.as_secs_f32();
         render_context.queue.write_buffer(

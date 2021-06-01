@@ -1,6 +1,6 @@
 use crate::{
     chunk::{Block, Chunk, CHUNK_SIZE},
-    vertex::Vertex,
+    vertex::BlockVertex,
 };
 use cgmath::{InnerSpace, Vector3};
 use rayon::prelude::*;
@@ -63,7 +63,7 @@ impl World {
     pub fn to_geometry(
         &self,
         highlighted: Option<(Vector3<usize>, Vector3<i32>)>,
-    ) -> Vec<(Vector3<usize>, Vec<Vertex>, Vec<u16>)> {
+    ) -> Vec<(Vector3<usize>, Vec<BlockVertex>, Vec<u16>)> {
         let instant = std::time::Instant::now();
 
         let chunks = &self.chunks;

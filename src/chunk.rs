@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, convert::TryInto, usize};
 
-use crate::{cube, quad::Quad, vertex::Vertex};
+use crate::{cube, quad::Quad, vertex::BlockVertex};
 use ahash::{AHashMap, AHashSet};
 use cgmath::{Vector3, Zero};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
@@ -321,7 +321,7 @@ impl Chunk {
 
     fn quads_to_geometry(
         quads: Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)>,
-    ) -> (Vec<Vertex>, Vec<u16>) {
+    ) -> (Vec<BlockVertex>, Vec<u16>) {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
         for (block_type, y, offset, quad, highlighted, visible_faces) in quads {
@@ -349,7 +349,7 @@ impl Chunk {
         &self,
         offset: Vector3<i32>,
         highlighted: Option<&(Vector3<usize>, Vector3<i32>)>,
-    ) -> (Vec<Vertex>, Vec<u16>) {
+    ) -> (Vec<BlockVertex>, Vec<u16>) {
         let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)> =
             Vec::new();
 

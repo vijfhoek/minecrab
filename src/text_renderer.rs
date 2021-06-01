@@ -106,10 +106,10 @@ impl TextRenderer {
 
         #[rustfmt::skip]
         let vertices = [
-            Vertex { position: [x,      y,      0.0], texture_coordinates: [tx,     ty,     0.0], ..Default::default() },
-            Vertex { position: [x + DX, y,      0.0], texture_coordinates: [tx + s, ty,     0.0], ..Default::default() },
-            Vertex { position: [x + DX, y - DY, 0.0], texture_coordinates: [tx + s, ty + s, 0.0], ..Default::default() },
-            Vertex { position: [x,      y - DY, 0.0], texture_coordinates: [tx,     ty + s, 0.0], ..Default::default() },
+            Vertex { position: [x,      y,      0.0], texture_coordinates: [tx,     ty    ], ..Default::default() },
+            Vertex { position: [x + DX, y,      0.0], texture_coordinates: [tx + s, ty    ], ..Default::default() },
+            Vertex { position: [x + DX, y - DY, 0.0], texture_coordinates: [tx + s, ty + s], ..Default::default() },
+            Vertex { position: [x,      y - DY, 0.0], texture_coordinates: [tx,     ty + s], ..Default::default() },
         ];
 
         #[rustfmt::skip]

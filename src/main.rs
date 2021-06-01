@@ -8,7 +8,7 @@ mod state;
 mod text_renderer;
 mod texture;
 mod time;
-mod uniforms;
+mod view;
 mod vertex;
 mod world;
 

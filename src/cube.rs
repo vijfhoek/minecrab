@@ -3,7 +3,7 @@ use cgmath::Vector3;
 use crate::{
     chunk::{FaceFlags, FACE_BACK, FACE_BOTTOM, FACE_FRONT, FACE_LEFT, FACE_RIGHT, FACE_TOP},
     quad::Quad,
-    vertex::Vertex,
+    vertex::BlockVertex,
 };
 
 #[allow(clippy::many_single_char_names)]
@@ -17,7 +17,7 @@ pub fn vertices(
     highlighted: Vector3<i32>,
     visible_faces: FaceFlags,
     start_index: u16,
-) -> (Vec<Vertex>, Vec<u16>) {
+) -> (Vec<BlockVertex>, Vec<u16>) {
     let w = quad.w as f32;
     let h = quad.h as f32;
     let zh = z_height;
@@ -37,10 +37,10 @@ pub fn vertices(
         let normal = [-1.0,  0.0,  0.0];
         let highlighted = (normal == highlighted) as i32;
         vertices.extend(&[
-            Vertex { position: [x, y,      z    ], texture_coordinates: [h,   1.0, t.0 as f32], normal, highlighted },
-            Vertex { position: [x, y,      z + h], texture_coordinates: [0.0, 1.0, t.0 as f32], normal, highlighted },
-            Vertex { position: [x, y + zh, z + h], texture_coordinates: [0.0, 0.0, t.0 as f32], normal, highlighted },
-            Vertex { position: [x, y + zh, z    ], texture_coordinates: [h,   0.0, t.0 as f32], normal, highlighted },
+            BlockVertex { position: [x, y,      z    ], texture_coordinates: [h,   1.0], texture_id: t.0 as i32, normal, highlighted },
+            BlockVertex { position: [x, y,      z + h], texture_coordinates: [0.0, 1.0], texture_id: t.0 as i32, normal, highlighted },
+            BlockVertex { position: [x, y + zh, z + h], texture_coordinates: [0.0, 0.0], texture_id: t.0 as i32, normal, highlighted },
+            BlockVertex { position: [x, y + zh, z    ], texture_coordinates: [h,   0.0], texture_id: t.0 as i32, normal, highlighted },
         ]);
         indices.extend(&[
             2 + current_index, current_index, 1 + current_index,
@@ -53,10 +53,10 @@ pub fn vertices(
         let normal = [1.0, 0.0, 0.0];
         let highlighted = (normal == highlighted) as i32;
         vertices.extend(&[
-            Vertex { position: [x + w, y,      z    ], texture_coordinates: [0.0, 1.0, t.1 as f32], normal, highlighted },
-            Vertex { position: [x + w, y,      z + h], texture_coordinates: [h,   1.0, t.1 as f32], normal, highlighted },
-            Vertex { position: [x + w, y + zh, z + h], texture_coordinates: [h,   0.0, t.1 as f32], normal, highlighted },
-            Vertex { position: [x + w, y + zh, z    ], texture_coordinates: [0.0, 0.0, t.1 as f32], normal, highlighted },
+            BlockVertex { position: [x + w, y,      z    ], texture_coordinates: [0.0, 1.0], texture_id: t.1 as i32, normal, highlighted },
+            BlockVertex { position: [x + w, y,      z + h], texture_coordinates: [h,   1.0], texture_id: t.1 as i32, normal, highlighted },
+            BlockVertex { position: [x + w, y + zh, z + h], texture_coordinates: [h,   0.0], texture_id: t.1 as i32, normal, highlighted },
+            BlockVertex { position: [x + w, y + zh, z    ], texture_coordinates: [0.0, 0.0], texture_id: t.1 as i32, normal, highlighted },
         ]);
         indices.extend(&[
             1 + current_index, current_index, 2 + current_index,
@@ -69,10 +69,10 @@ pub fn vertices(
         let normal = [0.0, 0.0, -1.0];
         let highlighted = (normal == highlighted) as i32;
         vertices.extend(&[
-            Vertex { position: [x,     y,      z], texture_coordinates: [w,   1.0, t.2 as f32], normal, highlighted },
-            Vertex { position: [x,     y + zh, z], texture_coordinates: [w,   0.0, t.2 as f32], normal, highlighted },
-            Vertex { position: [x + w, y + zh, z], texture_coordinates: [0.0, 0.0, t.2 as f32], normal, highlighted },
-            Vertex { position: [x + w, y,      z], texture_coordinates: [0.0, 1.0, t.2 as f32], normal, highlighted },
+            BlockVertex { position: [x,     y,      z], texture_coordinates: [w,   1.0], texture_id: t.2 as i32, normal, highlighted },
+            BlockVertex { position: [x,     y + zh, z], texture_coordinates: [w,   0.0], texture_id: t.2 as i32, normal, highlighted },
+            BlockVertex { position: [x + w, y + zh, z], texture_coordinates: [0.0, 0.0], texture_id: t.2 as i32, normal, highlighted },
+            BlockVertex { position: [x + w, y,      z], texture_coordinates: [0.0, 1.0], texture_id: t.2 as i32, normal, highlighted },
         ]);
         indices.extend(&[
             2 + current_index, current_index, 1 + current_index,
@@ -85,10 +85,10 @@ pub fn vertices(
         let normal = [0.0, 0.0, 1.0];
         let highlighted = (normal == highlighted) as i32;
         vertices.extend(&[
-            Vertex { position: [x,     y,      z + h], texture_coordinates: [0.0, 1.0, t.3 as f32], normal, highlighted },
-            Vertex { position: [x,     y + zh, z + h], texture_coordinates: [0.0, 0.0, t.3 as f32], normal, highlighted },
-            Vertex { position: [x + w, y + zh, z + h], texture_coordinates: [w,   0.0, t.3 as f32], normal, highlighted },
-            Vertex { position: [x + w, y,      z + h], texture_coordinates: [w,   1.0, t.3 as f32], normal, highlighted },
+            BlockVertex { position: [x,     y,      z + h], texture_coordinates: [0.0, 1.0], texture_id: t.3 as i32, normal, highlighted },
+            BlockVertex { position: [x,     y + zh, z + h], texture_coordinates: [0.0, 0.0], texture_id: t.3 as i32, normal, highlighted },
+            BlockVertex { position: [x + w, y + zh, z + h], texture_coordinates: [w,   0.0], texture_id: t.3 as i32, normal, highlighted },
+            BlockVertex { position: [x + w, y,      z + h], texture_coordinates: [w,   1.0], texture_id: t.3 as i32, normal, highlighted },
         ]);
         indices.extend(&[
             1 + current_index, current_index, 2 + current_index,
@@ -101,10 +101,10 @@ pub fn vertices(
         let normal = [0.0, -1.0, 0.0];
         let highlighted = (normal == highlighted) as i32;
         vertices.extend(&[
-            Vertex { position: [x,     y, z    ], texture_coordinates: [w,   0.0, t.4 as f32], normal, highlighted },
-            Vertex { position: [x,     y, z + h], texture_coordinates: [w,   h,   t.4 as f32], normal, highlighted },
-            Vertex { position: [x + w, y, z + h], texture_coordinates: [0.0, h,   t.4 as f32], normal, highlighted },
-            Vertex { position: [x + w, y, z    ], texture_coordinates: [0.0, 0.0, t.4 as f32], normal, highlighted },
+            BlockVertex { position: [x,     y, z    ], texture_coordinates: [w,   0.0], texture_id: t.4 as i32, normal, highlighted },
+            BlockVertex { position: [x,     y, z + h], texture_coordinates: [w,   h  ], texture_id: t.4 as i32, normal, highlighted },
+            BlockVertex { position: [x + w, y, z + h], texture_coordinates: [0.0, h  ], texture_id: t.4 as i32, normal, highlighted },
+            BlockVertex { position: [x + w, y, z    ], texture_coordinates: [0.0, 0.0], texture_id: t.4 as i32, normal, highlighted },
         ]);
         indices.extend(&[
             current_index, 2 + current_index, 1 + current_index,
@@ -117,10 +117,10 @@ pub fn vertices(
         let normal = [0.0, 1.0, 0.0];
         let highlighted = (normal == highlighted) as i32;
         vertices.extend(&[
-            Vertex { position: [x,     y + zh, z    ], texture_coordinates: [0.0, 0.0, t.5 as f32], normal, highlighted },
-            Vertex { position: [x,     y + zh, z + h], texture_coordinates: [0.0, h,   t.5 as f32], normal, highlighted },
-            Vertex { position: [x + w, y + zh, z + h], texture_coordinates: [w,   h,   t.5 as f32], normal, highlighted },
-            Vertex { position: [x + w, y + zh, z    ], texture_coordinates: [w,   0.0, t.5 as f32], normal, highlighted },
+            BlockVertex { position: [x,     y + zh, z    ], texture_coordinates: [0.0, 0.0], texture_id: t.5 as i32, normal, highlighted },
+            BlockVertex { position: [x,     y + zh, z + h], texture_coordinates: [0.0, h  ], texture_id: t.5 as i32, normal, highlighted },
+            BlockVertex { position: [x + w, y + zh, z + h], texture_coordinates: [w,   h  ], texture_id: t.5 as i32, normal, highlighted },
+            BlockVertex { position: [x + w, y + zh, z    ], texture_coordinates: [w,   0.0], texture_id: t.5 as i32, normal, highlighted },
         ]);
         indices.extend(&[
             current_index, 1 + current_index, 2 + current_index,

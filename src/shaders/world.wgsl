@@ -1,7 +1,7 @@
 [[block]]
-struct Uniforms {
-    view_position: vec4<f32>;
-    view_projection: mat4x4<f32>;
+struct View {
+    position: vec4<f32>;
+    projection: mat4x4<f32>;
 };
 
 [[block]]
@@ -10,24 +10,26 @@ struct Time {
 };
 
 [[group(1), binding(0)]]
-var<uniform> uniforms: Uniforms;
+var<uniform> view: View;
 
 [[group(2), binding(0)]]
 var<uniform> time: Time;
 
 struct VertexInput {
     [[location(0)]] position: vec3<f32>;
-    [[location(1)]] texture_coordinates: vec3<f32>;
+    [[location(1)]] texture_coordinates: vec2<f32>;
     [[location(2)]] normal: vec3<f32>;
     [[location(3)]] highlighted: i32;
+    [[location(4)]] texture_id: i32;
 };
 
 struct VertexOutput {
     [[builtin(position)]] clip_position: vec4<f32>;
-    [[location(0)]] texture_coordinates: vec3<f32>;
+    [[location(0)]] texture_coordinates: vec2<f32>;
     [[location(1)]] world_normal: vec3<f32>;
     [[location(2)]] world_position: vec3<f32>;
     [[location(3)]] highlighted: i32;
+    [[location(4)]] texture_id: i32;
 };
 
 let pi: f32 = 3.14159265359;
@@ -37,17 +39,19 @@ fn main(model: VertexInput) -> VertexOutput {
     var out: VertexOutput;
 
     out.world_normal = model.normal;
-    if (model.texture_coordinates.z == 8.0) {
+    if (model.texture_id == 8) {
         // water
         let offset = (sin(time.time * 0.5 + model.position.x) * cos(time.time * 0.9 + model.position.y) + 2.5) / 10.0;
         out.world_position = vec3<f32>(model.position.x, model.position.y - offset, model.position.z);
-        out.texture_coordinates = vec3<f32>(model.texture_coordinates.xy + (time.time / 10.0), 8.0 + (time.time * 10.0) % 32.0);
+        out.texture_coordinates = model.texture_coordinates + (time.time / 10.0);
+        out.texture_id = i32(8.0 + (time.time * 10.0) % 32.0);
     } else {
         out.world_position = model.position;
         out.texture_coordinates = model.texture_coordinates;
+        out.texture_id = model.texture_id;
     }
 
-    out.clip_position = uniforms.view_projection * vec4<f32>(out.world_position, 1.0);
+    out.clip_position = view.projection * vec4<f32>(out.world_position, 1.0);
     out.highlighted = model.highlighted;
     return out;
 }
@@ -60,8 +64,8 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let object_color: vec4<f32> = textureSample(
         texture_array,
         texture_sampler,
-        in.texture_coordinates.xy,
-        i32(round(in.texture_coordinates.z))
+        in.texture_coordinates,
+        in.texture_id
     );
 
     let light_position = vec3<f32>(-100.0, 500.0, -200.0);
@@ -71,7 +75,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     let ambient_color = light_color * ambient_strength;
 
     let light_direction = normalize(light_position - in.world_position);
-    let view_direction = normalize(uniforms.view_position.xyz - in.world_position);
+    let view_direction = normalize(view.position.xyz - in.world_position);
     let half_direction = normalize(view_direction + light_direction);
 
     let diffuse_strength = max(dot(in.world_normal, light_direction), 0.0);

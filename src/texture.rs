@@ -3,6 +3,8 @@ use std::num::NonZeroU32;
 use image::EncodableLayout;
 use wgpu::Origin3d;
 
+use crate::render_context::RenderContext;
+
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub sampler: Option<wgpu::Sampler>,
@@ -12,40 +14,40 @@ pub struct Texture {
 impl Texture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-    pub fn create_depth_texture(
-        device: &wgpu::Device,
-        swap_chain_descriptor: &wgpu::SwapChainDescriptor,
-        label: &str,
-    ) -> Self {
+    pub fn create_depth_texture(render_context: &RenderContext, label: &str) -> Self {
         let size = wgpu::Extent3d {
-            width: swap_chain_descriptor.width,
-            height: swap_chain_descriptor.height,
+            width: render_context.swap_chain_descriptor.width,
+            height: render_context.swap_chain_descriptor.height,
             depth_or_array_layers: 1,
         };
 
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(label),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
-        });
+        let texture = render_context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: Self::DEPTH_FORMAT,
+                usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
+            });
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::LessEqual),
-            lod_min_clamp: -100.0,
-            lod_max_clamp: 100.0,
-            ..Default::default()
-        });
+        let sampler = render_context
+            .device
+            .create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                compare: Some(wgpu::CompareFunction::LessEqual),
+                lod_min_clamp: -100.0,
+                lod_max_clamp: 100.0,
+                ..Default::default()
+            });
 
         Self {
             texture,
@@ -55,8 +57,7 @@ impl Texture {
     }
 
     pub fn from_bytes(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        render_context: &RenderContext,
         bytes: &[u8],
         label: &str,
     ) -> anyhow::Result<Self> {
@@ -70,19 +71,21 @@ impl Texture {
             depth_or_array_layers: 1,
         };
 
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(label),
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsage::SAMPLED
-                | wgpu::TextureUsage::COPY_DST
-                | wgpu::TextureUsage::COPY_SRC,
-        });
+        let texture = render_context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: texture_size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsage::SAMPLED
+                    | wgpu::TextureUsage::COPY_DST
+                    | wgpu::TextureUsage::COPY_SRC,
+            });
 
-        queue.write_texture(
+        render_context.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture,
                 mip_level: 0,
@@ -165,38 +168,43 @@ impl TextureManager {
         }
     }
 
-    pub fn load_all(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> anyhow::Result<()> {
-        self.load(device, queue, "assets/block/cobblestone.png")?; // 0
-        self.load(device, queue, "assets/block/dirt.png")?; // 1
-        self.load(device, queue, "assets/block/stone.png")?; // 2
-        self.load(device, queue, "assets/grass_block_top_plains.png")?; // 3
-        self.load(device, queue, "assets/grass_block_side_plains.png")?; // 4
-        self.load(device, queue, "assets/block/bedrock.png")?; // 5
-        self.load(device, queue, "assets/block/sand.png")?; // 6
-        self.load(device, queue, "assets/block/gravel.png")?; // 7
+    pub fn load_all(&mut self, render_context: &RenderContext) -> anyhow::Result<()> {
+        self.load(render_context, "assets/block/cobblestone.png")?; // 0
+        self.load(render_context, "assets/block/dirt.png")?; // 1
+        self.load(render_context, "assets/block/stone.png")?; // 2
+        self.load(render_context, "assets/grass_block_top_plains.png")?; // 3
+        self.load(render_context, "assets/grass_block_side_plains.png")?; // 4
+        self.load(render_context, "assets/block/bedrock.png")?; // 5
+        self.load(render_context, "assets/block/sand.png")?; // 6
+        self.load(render_context, "assets/block/gravel.png")?; // 7
         for i in 0..64 {
             let path = format!("assets/water_still_plains/frame-{}.png", i);
-            self.load(device, queue, &path)?; // 8 - 71
+            self.load(render_context, &path)?; // 8 - 71
         }
         assert_eq!(TEXTURE_COUNT, self.textures.len());
 
-        let texture_array = device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size: wgpu::Extent3d {
-                width: 512,
-                height: 512,
-                depth_or_array_layers: TEXTURE_COUNT as u32,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
-        });
+        let texture_array = render_context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d {
+                    width: 512,
+                    height: 512,
+                    depth_or_array_layers: TEXTURE_COUNT as u32,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+            });
 
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("texture copy encoder"),
-        });
+        let mut encoder =
+            render_context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("texture copy encoder"),
+                });
 
         for (i, texture) in self.textures.iter().enumerate() {
             encoder.copy_texture_to_texture(
@@ -222,7 +230,9 @@ impl TextureManager {
             )
         }
 
-        queue.submit(std::iter::once(encoder.finish()));
+        render_context
+            .queue
+            .submit(std::iter::once(encoder.finish()));
 
         let view = texture_array.create_view(&wgpu::TextureViewDescriptor {
             label: None,
@@ -231,32 +241,29 @@ impl TextureManager {
             ..wgpu::TextureViewDescriptor::default()
         });
 
-        self.bind_group = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(&("Block texture bind group")),
-            layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-            ],
-        }));
+        self.bind_group = Some(render_context.device.create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                label: Some(&("Block texture bind group")),
+                layout: &self.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                ],
+            },
+        ));
 
         Ok(())
     }
 
-    pub fn load(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        path: &str,
-    ) -> anyhow::Result<usize> {
+    pub fn load(&mut self, render_context: &RenderContext, path: &str) -> anyhow::Result<usize> {
         let bytes = std::fs::read(path)?;
-        let texture = Texture::from_bytes(device, queue, &bytes, path)?;
+        let texture = Texture::from_bytes(render_context, &bytes, path)?;
 
         let id = self.textures.len();
         self.textures.push(texture);

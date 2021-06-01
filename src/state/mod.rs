@@ -4,6 +4,7 @@ pub mod world_state;
 use std::time::Duration;
 
 use winit::{
+    dpi::PhysicalSize,
     event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
     window::Window,
 };
@@ -11,15 +12,11 @@ use winit::{
 use hud_state::HudState;
 use world_state::WorldState;
 
+use crate::render_context::RenderContext;
+
 pub struct State {
-    pub window_size: winit::dpi::PhysicalSize<u32>,
-    render_surface: wgpu::Surface,
-    render_device: wgpu::Device,
-    render_queue: wgpu::Queue,
-
-    swap_chain_descriptor: wgpu::SwapChainDescriptor,
-    swap_chain: wgpu::SwapChain,
-
+    pub window_size: PhysicalSize<u32>,
+    render_context: RenderContext,
     world_state: WorldState,
     hud_state: HudState,
 
@@ -87,17 +84,21 @@ impl State {
         let (swap_chain_descriptor, swap_chain) =
             Self::create_swap_chain(window, &render_adapter, &render_device, &render_surface);
 
-        let world_state = WorldState::new(&render_device, &render_queue, &swap_chain_descriptor);
-        let hud_state = HudState::new(&render_device, &render_queue, &swap_chain_descriptor);
-
-        Self {
-            window_size,
-            render_surface,
-            render_device,
-            render_queue,
+        let render_context = RenderContext {
+            surface: render_surface,
+            device: render_device,
+            queue: render_queue,
 
             swap_chain_descriptor,
             swap_chain,
+        };
+
+        let world_state = WorldState::new(&render_context);
+        let hud_state = HudState::new(&render_context);
+
+        Self {
+            window_size,
+            render_context,
 
             world_state,
             hud_state,
@@ -106,25 +107,25 @@ impl State {
         }
     }
 
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
         println!("resizing to {:?}", new_size);
         self.window_size = new_size;
-        self.swap_chain_descriptor.width = new_size.width;
-        self.swap_chain_descriptor.height = new_size.height;
+        self.render_context.swap_chain_descriptor.width = new_size.width;
+        self.render_context.swap_chain_descriptor.height = new_size.height;
 
-        self.world_state
-            .resize(&self.render_device, &self.swap_chain_descriptor, new_size);
+        self.world_state.resize(&self.render_context, new_size);
 
-        self.swap_chain = self
-            .render_device
-            .create_swap_chain(&self.render_surface, &self.swap_chain_descriptor);
+        self.render_context.swap_chain = self.render_context.device.create_swap_chain(
+            &self.render_context.surface,
+            &self.render_context.swap_chain_descriptor,
+        );
     }
 
     fn input_keyboard(&mut self, key_code: &VirtualKeyCode, state: &ElementState) {
         match key_code {
-            VirtualKeyCode::F1 if state == &ElementState::Pressed => self
-                .world_state
-                .toggle_wireframe(&self.render_device, &self.swap_chain_descriptor),
+            VirtualKeyCode::F1 if state == &ElementState::Pressed => {
+                self.world_state.toggle_wireframe(&self.render_context)
+            }
             _ => self.world_state.input_keyboard(key_code, state),
         }
     }
@@ -148,29 +149,30 @@ impl State {
                 state: ElementState::Pressed,
             } if self.mouse_grabbed => self
                 .world_state
-                .input_mouse_button(*button, &self.render_device),
+                .input_mouse_button(*button, &self.render_context),
             DeviceEvent::MouseMotion { delta: (dx, dy) } => self.input_mouse(*dx, *dy),
             _ => (),
         }
     }
 
     pub fn update(&mut self, dt: Duration) {
-        self.world_state
-            .update(dt, &self.render_device, &self.render_queue);
+        self.world_state.update(dt, &self.render_context);
     }
 
     pub fn render(&mut self) -> anyhow::Result<usize> {
-        let frame = self.swap_chain.get_current_frame()?.output;
+        let frame = self.render_context.swap_chain.get_current_frame()?.output;
 
         let mut render_encoder = self
-            .render_device
+            .render_context
+            .device
             .create_command_encoder(&Default::default());
 
         let mut triangle_count = 0;
         triangle_count += self.world_state.render(&frame, &mut render_encoder);
         triangle_count += self.hud_state.render(&frame, &mut render_encoder)?;
 
-        self.render_queue
+        self.render_context
+            .queue
             .submit(std::iter::once(render_encoder.finish()));
 
         Ok(triangle_count)

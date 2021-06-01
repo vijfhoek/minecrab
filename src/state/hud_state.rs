@@ -3,7 +3,7 @@ use wgpu::{
     CommandEncoder, Device, Queue, SwapChainDescriptor, SwapChainTexture,
 };
 
-use crate::{texture::Texture, vertex::Vertex};
+use crate::{render_context::RenderContext, texture::Texture, vertex::Vertex};
 
 const UI_SCALE_X: f32 = 0.0045;
 const UI_SCALE_Y: f32 = 0.008;
@@ -16,31 +16,29 @@ pub struct HudState {
 }
 
 impl HudState {
-    pub fn new(
-        render_device: &Device,
-        render_queue: &Queue,
-        swap_chain_descriptor: &SwapChainDescriptor,
-    ) -> Self {
-        let (texture_bind_group_layout, texture_bind_group) =
-            Self::create_textures(render_device, render_queue);
+    pub fn new(render_context: &RenderContext) -> Self {
+        let (texture_bind_group_layout, texture_bind_group) = Self::create_textures(render_context);
 
-        let render_pipeline = Self::create_render_pipeline(
-            &render_device,
-            &swap_chain_descriptor,
-            &[&texture_bind_group_layout],
-        );
+        let render_pipeline =
+            Self::create_render_pipeline(render_context, &[&texture_bind_group_layout]);
 
-        let crosshair_vertex_buffer = render_device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("HUD crosshair vertex buffer"),
-            contents: bytemuck::cast_slice(&CROSSHAIR_VERTICES),
-            usage: wgpu::BufferUsage::VERTEX,
-        });
+        let crosshair_vertex_buffer =
+            render_context
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: Some("HUD crosshair vertex buffer"),
+                    contents: bytemuck::cast_slice(&CROSSHAIR_VERTICES),
+                    usage: wgpu::BufferUsage::VERTEX,
+                });
 
-        let crosshair_index_buffer = render_device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("HUD crosshair index buffer"),
-            contents: bytemuck::cast_slice(CROSSHAIR_INDICES),
-            usage: wgpu::BufferUsage::INDEX,
-        });
+        let crosshair_index_buffer =
+            render_context
+                .device
+                .create_buffer_init(&BufferInitDescriptor {
+                    label: Some("HUD crosshair index buffer"),
+                    contents: bytemuck::cast_slice(CROSSHAIR_INDICES),
+                    usage: wgpu::BufferUsage::INDEX,
+                });
 
         Self {
             texture_bind_group,
@@ -81,119 +79,126 @@ impl HudState {
         Ok(CROSSHAIR_INDICES.len() / 3)
     }
 
-    fn create_textures(
-        render_device: &wgpu::Device,
-        render_queue: &wgpu::Queue,
-    ) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
+    fn create_textures(render_context: &RenderContext) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
         let texture = Texture::from_bytes(
-            render_device,
-            render_queue,
+            render_context,
             include_bytes!("../../assets/gui/widgets.png"),
             "Texture GUI widgets",
         )
         .unwrap();
 
-        let sampler = render_device.create_sampler(&wgpu::SamplerDescriptor {
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Linear,
-            ..wgpu::SamplerDescriptor::default()
-        });
+        let sampler = render_context
+            .device
+            .create_sampler(&wgpu::SamplerDescriptor {
+                mag_filter: wgpu::FilterMode::Nearest,
+                min_filter: wgpu::FilterMode::Linear,
+                ..wgpu::SamplerDescriptor::default()
+            });
 
         let bind_group_layout =
-            render_device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("GUI texture bind group layout"),
+            render_context
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("GUI texture bind group layout"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler {
+                                comparison: false,
+                                filtering: true,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                    ],
+                });
+
+        let bind_group = render_context
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("GUI texture bind group"),
+                layout: &bind_group_layout,
                 entries: &[
-                    wgpu::BindGroupLayoutEntry {
+                    wgpu::BindGroupEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            comparison: false,
-                            filtering: true,
-                        },
-                        count: None,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
                     },
-                    wgpu::BindGroupLayoutEntry {
+                    wgpu::BindGroupEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
+                        resource: wgpu::BindingResource::TextureView(&texture.view),
                     },
                 ],
             });
-
-        let bind_group = render_device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("GUI texture bind group"),
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
-                },
-            ],
-        });
 
         (bind_group_layout, bind_group)
     }
 
     fn create_render_pipeline(
-        render_device: &wgpu::Device,
-        swap_chain_descriptor: &SwapChainDescriptor,
+        render_context: &RenderContext,
         bind_group_layouts: &[&wgpu::BindGroupLayout],
     ) -> wgpu::RenderPipeline {
-        let module = &render_device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("UI shader"),
-            flags: wgpu::ShaderFlags::all(),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/ui.wgsl").into()),
-        });
-
-        let pipeline_layout =
-            render_device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("UI render pipeline layout"),
-                bind_group_layouts,
-                push_constant_ranges: &[],
+        let module = &render_context
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: Some("UI shader"),
+                flags: wgpu::ShaderFlags::all(),
+                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/ui.wgsl").into()),
             });
 
-        render_device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("UI render pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module,
-                entry_point: "main",
-                buffers: &[Vertex::desc()],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module,
-                entry_point: "main",
-                targets: &[wgpu::ColorTargetState {
-                    format: swap_chain_descriptor.format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrite::ALL,
-                }],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                clamp_depth: false,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-        })
+        let pipeline_layout =
+            render_context
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("UI render pipeline layout"),
+                    bind_group_layouts,
+                    push_constant_ranges: &[],
+                });
+
+        render_context
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("UI render pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module,
+                    entry_point: "main",
+                    buffers: &[Vertex::desc()],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module,
+                    entry_point: "main",
+                    targets: &[wgpu::ColorTargetState {
+                        format: render_context.swap_chain_descriptor.format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrite::ALL,
+                    }],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    clamp_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+            })
     }
 }
 

@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use cgmath::Vector3;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    CommandEncoder, Device, Queue, SwapChainDescriptor, SwapChainTexture,
+    CommandEncoder, SwapChainTexture,
 };
 
 use crate::{

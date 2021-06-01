@@ -8,7 +8,7 @@ use wgpu::{
 };
 use winit::{
     dpi::PhysicalSize,
-    event::{ElementState, VirtualKeyCode},
+    event::{ElementState, MouseButton, VirtualKeyCode},
 };
 
 use crate::{
@@ -42,8 +42,11 @@ pub struct WorldState {
     render_pipeline_layout: wgpu::PipelineLayout,
     pub highlighted: Option<(Vector3<usize>, Vector3<i32>)>,
 
-    pub right_speed: f32,
-    pub forward_speed: f32,
+    pub forward_pressed: bool,
+    pub backward_pressed: bool,
+    pub left_pressed: bool,
+    pub right_pressed: bool,
+
     pub up_speed: f32,
     pub sprinting: bool,
 }
@@ -358,10 +361,12 @@ impl WorldState {
             wireframe: false,
             highlighted: None,
 
-            right_speed: 0.0,
-            forward_speed: 0.0,
             up_speed: 0.0,
             sprinting: false,
+            forward_pressed: false,
+            backward_pressed: false,
+            left_pressed: false,
+            right_pressed: false,
         };
 
         world_state.update_world_geometry(render_context);
@@ -462,15 +467,15 @@ impl WorldState {
         }
     }
 
-    pub fn input_mouse_button(&mut self, button: u32, render_context: &RenderContext) {
+    pub fn input_mouse_button(&mut self, button: &MouseButton, render_context: &RenderContext) {
         let camera = &self.camera;
 
         let world = &mut self.world;
         if let Some((pos, axis)) = world.raycast(camera.position.to_vec(), camera.direction()) {
-            if button == 1 {
+            if button == &MouseButton::Left {
                 world.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
                 self.update_chunk_geometry(render_context, pos / CHUNK_SIZE);
-            } else if button == 3 {
+            } else if button == &MouseButton::Right {
                 let new_pos = pos.cast().unwrap() - axis;
 
                 world.set_block(
@@ -488,18 +493,12 @@ impl WorldState {
     }
 
     pub fn input_keyboard(&mut self, key_code: &VirtualKeyCode, state: &ElementState) {
-        let amount = if state == &ElementState::Pressed {
-            1.0
-        } else {
-            -1.0
-        };
-
+        let pressed = state == &ElementState::Pressed;
         match key_code {
-            VirtualKeyCode::W => self.forward_speed += amount,
-            VirtualKeyCode::S => self.forward_speed -= amount,
-            VirtualKeyCode::A => self.right_speed -= amount,
-            VirtualKeyCode::D => self.right_speed += amount,
-            // VirtualKeyCode::LShift => self.up_speed -= amount,
+            VirtualKeyCode::W => self.forward_pressed = pressed,
+            VirtualKeyCode::S => self.backward_pressed = pressed,
+            VirtualKeyCode::A => self.left_pressed = pressed,
+            VirtualKeyCode::D => self.right_pressed = pressed,
             VirtualKeyCode::Space if state == &ElementState::Pressed => self.up_speed = 0.6,
             VirtualKeyCode::LControl => self.sprinting = state == &ElementState::Pressed,
             _ => (),
@@ -531,15 +530,17 @@ impl WorldState {
             self.up_speed = 0.0;
         }
 
+        let forward_speed = self.forward_pressed as i32 - self.backward_pressed as i32;
         let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        let forward = forward * self.forward_speed * speed * dt_seconds;
+        let forward = forward * forward_speed as f32 * speed * dt_seconds;
         new_position += forward;
         if self.check_collision(new_position) {
             new_position -= forward;
         }
 
+        let right_speed = self.right_pressed as i32 - self.left_pressed as i32;
         let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        let right = right * self.right_speed * speed * dt_seconds;
+        let right = right * right_speed as f32 * speed * dt_seconds;
         new_position += right;
         if self.check_collision(new_position) {
             new_position -= right;

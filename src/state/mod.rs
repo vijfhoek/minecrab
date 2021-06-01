@@ -6,7 +6,7 @@ use std::time::Duration;
 use cgmath::EuclideanSpace;
 use winit::{
     dpi::PhysicalSize,
-    event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
+    event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
     window::Window,
 };
 
@@ -137,20 +137,32 @@ impl State {
         }
     }
 
-    pub fn input(&mut self, event: &DeviceEvent) {
+    pub fn window_event(&mut self, event: &WindowEvent) {
         match event {
-            DeviceEvent::Key(KeyboardInput {
-                virtual_keycode: Some(key),
-                state,
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode: Some(key),
+                        state,
+                        ..
+                    },
                 ..
-            }) => self.input_keyboard(key, state),
+            } => self.input_keyboard(key, state),
 
-            DeviceEvent::Button {
+            WindowEvent::MouseInput {
                 button,
                 state: ElementState::Pressed,
+                ..
             } if self.mouse_grabbed => self
                 .world_state
-                .input_mouse_button(*button, &self.render_context),
+                .input_mouse_button(button, &self.render_context),
+
+            _ => (),
+        }
+    }
+
+    pub fn device_event(&mut self, event: &DeviceEvent) {
+        match event {
             DeviceEvent::MouseMotion { delta: (dx, dy) } => self.input_mouse(*dx, *dy),
             _ => (),
         }

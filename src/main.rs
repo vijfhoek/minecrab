@@ -1,16 +1,16 @@
+mod aabb;
 mod camera;
 mod chunk;
 mod cube;
 mod quad;
+mod render_context;
 mod state;
+mod text_renderer;
 mod texture;
 mod time;
 mod uniforms;
 mod vertex;
 mod world;
-mod render_context;
-mod text_renderer;
-mod aabb;
 
 use std::time::{Duration, Instant};
 use wgpu::SwapChainError;
@@ -49,7 +49,7 @@ fn main() {
 
     event_loop.run(move |event, _, control_flow| {
         match event {
-            Event::DeviceEvent { ref event, .. } => state.input(event),
+            Event::DeviceEvent { ref event, .. } => state.device_event(event),
             Event::WindowEvent {
                 ref event,
                 window_id,
@@ -84,8 +84,10 @@ fn main() {
                         window.set_cursor_visible(false);
                         state.mouse_grabbed = true;
                     }
+
+                    state.window_event(event);
                 }
-                _ => {}
+                event => { state.window_event(event); }
             },
             Event::RedrawRequested(_) => {
                 let frame_elapsed = frame_instant.elapsed();

@@ -10,18 +10,43 @@ pub struct Vertex {
     pub normal: [f32; 3],
 }
 
-const VERTEX_DESC: &[VertexAttribute] = &wgpu::vertex_attr_array![
+const VERTEX_ATTRIBUTES: &[VertexAttribute] = &wgpu::vertex_attr_array![
     0 => Float32x3,
     1 => Float32x2,
     2 => Float32x3,
 ];
 
 impl Vertex {
-    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
-            attributes: VERTEX_DESC,
+            attributes: VERTEX_ATTRIBUTES,
+        }
+    }
+}
+
+/// Vertex used to represent HUD vertices.
+///
+/// A vertex with a 2D position and no normal, for representing UI elements.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct HudVertex {
+    pub position: [f32; 2],
+    pub texture_coordinates: [f32; 2],
+}
+
+const HUD_VERTEX_ATTRIBUTES: &[VertexAttribute] = &wgpu::vertex_attr_array![
+    0 => Float32x2,
+    1 => Float32x2,
+];
+
+impl HudVertex {
+    pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::InputStepMode::Vertex,
+            attributes: HUD_VERTEX_ATTRIBUTES,
         }
     }
 }
@@ -41,7 +66,7 @@ pub struct BlockVertex {
     pub texture_id: i32,
 }
 
-const BLOCK_VERTEX_DESC: &[VertexAttribute] = &wgpu::vertex_attr_array![
+const BLOCK_VERTEX_ATTRIBUTES: &[VertexAttribute] = &wgpu::vertex_attr_array![
     0 => Float32x3,
     1 => Float32x2,
     2 => Float32x3,
@@ -50,11 +75,11 @@ const BLOCK_VERTEX_DESC: &[VertexAttribute] = &wgpu::vertex_attr_array![
 ];
 
 impl BlockVertex {
-    pub fn descriptor<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
-            attributes: BLOCK_VERTEX_DESC,
+            attributes: BLOCK_VERTEX_ATTRIBUTES,
         }
     }
 }

@@ -481,15 +481,15 @@ impl WorldState {
         }
     }
 
-    pub fn input_keyboard(&mut self, key_code: &VirtualKeyCode, state: &ElementState) {
-        let pressed = state == &ElementState::Pressed;
+    pub fn input_keyboard(&mut self, key_code: VirtualKeyCode, state: ElementState) {
+        let pressed = state == ElementState::Pressed;
         match key_code {
             VirtualKeyCode::W => self.forward_pressed = pressed,
             VirtualKeyCode::S => self.backward_pressed = pressed,
             VirtualKeyCode::A => self.left_pressed = pressed,
             VirtualKeyCode::D => self.right_pressed = pressed,
-            VirtualKeyCode::Space if state == &ElementState::Pressed => self.up_speed = 0.6,
-            VirtualKeyCode::LControl => self.sprinting = state == &ElementState::Pressed,
+            VirtualKeyCode::Space if state == ElementState::Pressed => self.up_speed = 0.6,
+            VirtualKeyCode::LControl => self.sprinting = state == ElementState::Pressed,
             _ => (),
         }
     }

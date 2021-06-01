@@ -114,7 +114,7 @@ impl Texture {
     }
 }
 
-pub const TEXTURE_COUNT: usize = 72;
+pub const TEXTURE_COUNT: usize = 40;
 
 pub struct TextureManager {
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -160,7 +160,7 @@ impl TextureManager {
                 address_mode_u: wgpu::AddressMode::Repeat,
                 address_mode_v: wgpu::AddressMode::Repeat,
                 address_mode_w: wgpu::AddressMode::Repeat,
-                mag_filter: wgpu::FilterMode::Linear,
+                mag_filter: wgpu::FilterMode::Nearest,
                 ..wgpu::SamplerDescriptor::default()
             });
 
@@ -182,9 +182,9 @@ impl TextureManager {
         self.load(render_context, "assets/block/bedrock.png")?; // 5
         self.load(render_context, "assets/block/sand.png")?; // 6
         self.load(render_context, "assets/block/gravel.png")?; // 7
-        for i in 0..64 {
+        for i in 0..32 {
             let path = format!("assets/water_still_plains/frame-{}.png", i);
-            self.load(render_context, &path)?; // 8 - 71
+            self.load(render_context, &path)?; // 8 - 39
         }
         assert_eq!(TEXTURE_COUNT, self.textures.len());
 
@@ -193,8 +193,8 @@ impl TextureManager {
             .create_texture(&wgpu::TextureDescriptor {
                 label: None,
                 size: wgpu::Extent3d {
-                    width: 512,
-                    height: 512,
+                    width: 16,
+                    height: 16,
                     depth_or_array_layers: TEXTURE_COUNT as u32,
                 },
                 mip_level_count: 1,
@@ -228,8 +228,8 @@ impl TextureManager {
                     },
                 },
                 wgpu::Extent3d {
-                    width: 512,
-                    height: 512,
+                    width: 16,
+                    height: 16,
                     depth_or_array_layers: 1,
                 },
             )

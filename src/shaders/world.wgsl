@@ -41,7 +41,7 @@ fn main(model: VertexInput) -> VertexOutput {
         // water
         let offset = (sin(time.time * 0.5 + model.position.x) * cos(time.time * 0.9 + model.position.y) + 2.5) / 10.0;
         out.world_position = vec3<f32>(model.position.x, model.position.y - offset, model.position.z);
-        out.texture_coordinates = vec3<f32>(model.texture_coordinates.xy + (time.time / 10.0), 8.0 + (time.time * 10.0) % 64.0);
+        out.texture_coordinates = vec3<f32>(model.texture_coordinates.xy + (time.time / 10.0), 8.0 + (time.time * 10.0) % 32.0);
     } else {
         out.world_position = model.position;
         out.texture_coordinates = model.texture_coordinates;

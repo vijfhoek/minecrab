@@ -33,6 +33,7 @@ pub struct WorldState {
     wireframe: bool,
     shader: wgpu::ShaderModule,
     render_pipeline_layout: wgpu::PipelineLayout,
+    pub highlighted: Option<(Vector3<usize>, Vector3<i32>)>,
 }
 
 impl WorldState {
@@ -201,7 +202,7 @@ impl WorldState {
     pub fn update_world_geometry(&mut self, render_device: &wgpu::Device) {
         let instant = Instant::now();
 
-        let world_geometry = self.world.to_geometry();
+        let world_geometry = self.world.to_geometry(self.highlighted);
         self.chunk_buffers.clear();
         for (chunk_position, chunk_vertices, chunk_indices) in world_geometry {
             self.chunk_buffers.insert(
@@ -231,9 +232,13 @@ impl WorldState {
         render_device: &wgpu::Device,
         chunk_position: Vector3<usize>,
     ) {
+        // println!("Updating chunk {:?}", chunk_position);
         let chunk = &mut self.world.chunks[chunk_position.y][chunk_position.z][chunk_position.x];
         let offset = chunk_position.map(|f| (f * CHUNK_SIZE) as i32);
-        let (vertices, indices) = chunk.to_geometry(offset);
+        let (vertices, indices) = chunk.to_geometry(
+            offset,
+            World::highlighted_for_chunk(self.highlighted, chunk_position).as_ref(),
+        );
 
         self.chunk_buffers.insert(
             chunk_position,
@@ -333,6 +338,7 @@ impl WorldState {
             world,
             chunk_buffers: AHashMap::new(),
             wireframe: false,
+            highlighted: None,
         };
 
         world_state.update_world_geometry(render_device);

@@ -1,18 +1,18 @@
-mod hud;
-mod world;
+pub mod hud_state;
+pub mod world_state;
 
 use std::time::Duration;
 
-use cgmath::{EuclideanSpace, InnerSpace, Rad, Vector3, Zero};
+use cgmath::{EuclideanSpace, InnerSpace, Rad, Vector3};
 use winit::{
     event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
     window::Window,
 };
 
-use hud::HudState;
-use world::WorldState;
+use hud_state::HudState;
+use world_state::WorldState;
 
-use crate::chunk::{Block, BlockType};
+use crate::chunk::{Block, BlockType, CHUNK_SIZE};
 
 pub struct State {
     pub window_size: winit::dpi::PhysicalSize<u32>,
@@ -30,6 +30,7 @@ pub struct State {
     forward_speed: f32,
     up_speed: f32,
     pub mouse_grabbed: bool,
+    sprinting: bool,
 }
 
 impl State {
@@ -111,6 +112,7 @@ impl State {
             right_speed: 0.0,
             forward_speed: 0.0,
             up_speed: 0.0,
+            sprinting: false,
             mouse_grabbed: false,
         }
     }
@@ -141,7 +143,8 @@ impl State {
             VirtualKeyCode::S => self.forward_speed -= amount,
             VirtualKeyCode::A => self.right_speed -= amount,
             VirtualKeyCode::D => self.right_speed += amount,
-            VirtualKeyCode::LControl => self.up_speed -= amount,
+            VirtualKeyCode::LShift => self.up_speed -= amount,
+            VirtualKeyCode::LControl => self.sprinting = state == &ElementState::Pressed,
             VirtualKeyCode::Space => self.up_speed += amount,
             VirtualKeyCode::F1 if state == &ElementState::Pressed => self
                 .world_state
@@ -164,17 +167,33 @@ impl State {
 
     fn update_aim(&mut self) {
         let camera = &self.world_state.camera;
-        let chunk = &mut self.world_state.world.chunks[0][0][0];
 
-        let position = chunk
-            .raycast(camera.position.to_vec(), camera.direction())
-            .map(|(position, _)| position);
+        let old = self.world_state.highlighted;
+        let new = self
+            .world_state
+            .world
+            .raycast(camera.position.to_vec(), camera.direction());
 
-        if position != chunk.highlighted {
-            chunk.highlighted = position;
-            println!("aiming at {:?}", position);
-            self.world_state
-                .update_chunk_geometry(&self.render_device, Vector3::zero());
+        let old_chunk = old.map(|h| h.0 / CHUNK_SIZE);
+        let new_chunk = new.map(|h| h.0 / CHUNK_SIZE);
+
+        if old != new {
+            self.world_state.highlighted = new;
+
+            if let Some(old_chunk_) = old_chunk {
+                self.world_state
+                    .update_chunk_geometry(&self.render_device, old_chunk_);
+            }
+
+            if let Some(new_chunk_) = new_chunk {
+                // Don't update the same chunk twice
+                if old_chunk != new_chunk {
+                    self.world_state
+                        .update_chunk_geometry(&self.render_device, new_chunk_);
+                }
+            }
+
+            // println!("Aiming at {:?}", new);
         }
     }
 
@@ -197,26 +216,30 @@ impl State {
                 state: ElementState::Pressed,
             } if self.mouse_grabbed => {
                 let camera = &self.world_state.camera;
-                let chunk = &mut self.world_state.world.chunks[0][0][0];
 
+                let world = &mut self.world_state.world;
                 if let Some((pos, axis)) =
-                    chunk.raycast(camera.position.to_vec(), camera.direction())
+                    world.raycast(camera.position.to_vec(), camera.direction())
                 {
+                    dbg!(&pos);
                     if *button == 1 {
-                        chunk.blocks[pos.y][pos.z][pos.x].take();
-                        dbg!(&pos);
+                        world.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
                         self.world_state
-                            .update_chunk_geometry(&self.render_device, Vector3::zero());
+                            .update_chunk_geometry(&self.render_device, pos / 16);
                     } else if *button == 3 {
                         let new_pos = pos.map(|x| x as i32) - axis;
-                        dbg!(&axis, &new_pos);
-                        chunk.blocks[new_pos.y as usize][new_pos.z as usize][new_pos.x as usize] =
+
+                        world.set_block(
+                            new_pos.x as isize,
+                            new_pos.y as isize,
+                            new_pos.z as isize,
                             Some(Block {
                                 block_type: BlockType::Cobblestone,
-                            });
+                            }),
+                        );
 
                         self.world_state
-                            .update_chunk_geometry(&self.render_device, Vector3::zero());
+                            .update_chunk_geometry(&self.render_device, pos / 16);
                     }
                 }
             }
@@ -231,13 +254,16 @@ impl State {
         let (yaw_sin, yaw_cos) = self.world_state.camera.yaw.0.sin_cos();
 
         let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        self.world_state.camera.position += forward * self.forward_speed * 30.0 * dt_secs;
+        self.world_state.camera.position +=
+            forward * self.forward_speed * 30.0 * (self.sprinting as i32 * 2 + 1) as f32 * dt_secs;
 
         let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        self.world_state.camera.position += right * self.right_speed * 30.0 * dt_secs;
+        self.world_state.camera.position +=
+            right * self.right_speed * 30.0 * (self.sprinting as i32 * 2 + 1) as f32 * dt_secs;
 
         let up = Vector3::new(0.0, 1.0, 0.0).normalize();
-        self.world_state.camera.position += up * self.up_speed * 30.0 * dt_secs;
+        self.world_state.camera.position +=
+            up * self.up_speed * 30.0 * (self.sprinting as i32 * 2 + 1) as f32 * dt_secs;
 
         self.world_state.update(dt, &self.render_queue);
 

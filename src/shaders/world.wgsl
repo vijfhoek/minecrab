@@ -30,6 +30,8 @@ struct VertexOutput {
     [[location(3)]] highlighted: i32;
 };
 
+let pi: f32 = 3.14159265359;
+
 [[stage(vertex)]]
 fn main(model: VertexInput) -> VertexOutput {
     var out: VertexOutput;
@@ -80,7 +82,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
 
     var result: vec3<f32> = (ambient_color + diffuse_color + specular_color) * object_color.xyz;
     if (in.highlighted != 0) {
-        result = result + 0.3;
+        result = result + 0.25 + sin(time.time * pi) * 0.07;
     }
 
     return vec4<f32>(result, object_color.a);

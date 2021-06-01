@@ -2,7 +2,7 @@ use std::{collections::VecDeque, convert::TryInto, usize};
 
 use crate::{cube, quad::Quad, vertex::Vertex};
 use ahash::{AHashMap, AHashSet};
-use cgmath::{InnerSpace, Vector3};
+use cgmath::{InnerSpace, Vector3, Zero};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
 
 #[allow(dead_code)]
@@ -58,7 +58,6 @@ type ChunkBlocks = [[[Option<Block>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
 
 pub struct Chunk {
     pub blocks: ChunkBlocks,
-    pub highlighted: Option<Vector3<usize>>,
 }
 
 impl Chunk {
@@ -139,10 +138,7 @@ impl Chunk {
             }
         }
 
-        Self {
-            blocks,
-            highlighted: None,
-        }
+        Self { blocks }
     }
 
     #[rustfmt::skip]
@@ -221,9 +217,12 @@ impl Chunk {
         offset: Vector3<i32>,
         culled: AHashMap<(usize, usize), (BlockType, FaceFlags)>,
         queue: &mut VecDeque<(usize, usize)>,
-    ) -> Vec<(BlockType, i32, Vector3<i32>, Quad, bool, FaceFlags)> {
-        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad, bool, FaceFlags)> = Vec::new();
+        highlighted: Option<&(Vector3<usize>, Vector3<i32>)>,
+    ) -> Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)> {
+        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)> =
+            Vec::new();
         let mut visited = AHashSet::new();
+        let hl = highlighted.map(|h| h.0);
         while let Some((x, z)) = queue.pop_front() {
             if visited.contains(&(x, z)) {
                 continue;
@@ -233,15 +232,29 @@ impl Chunk {
             if let Some(&(block_type, visible_faces)) = &culled.get(&(x, z)) {
                 let mut quad_faces = visible_faces;
 
-                if self.highlighted == Some(Vector3::new(x, y, z)) {
+                if hl == Some(Vector3::new(x, y, z)) {
                     let quad = Quad::new(x as i32, z as i32, 1, 1);
-                    quads.push((block_type, y as i32, offset, quad, true, quad_faces));
+                    quads.push((
+                        block_type,
+                        y as i32,
+                        offset,
+                        quad,
+                        highlighted.unwrap().1,
+                        quad_faces,
+                    ));
                     continue;
                 }
 
                 if block_type == BlockType::Water {
                     let quad = Quad::new(x as i32, z as i32, 1, 1);
-                    quads.push((block_type, y as i32, offset, quad, false, quad_faces));
+                    quads.push((
+                        block_type,
+                        y as i32,
+                        offset,
+                        quad,
+                        Vector3::zero(),
+                        quad_faces,
+                    ));
                     continue;
                 }
 
@@ -250,9 +263,7 @@ impl Chunk {
                 for x_ in x..CHUNK_SIZE {
                     xmax = x_ + 1;
 
-                    if visited.contains(&(xmax, z))
-                        || self.highlighted == Some(Vector3::new(xmax, y, z))
-                    {
+                    if visited.contains(&(xmax, z)) || hl == Some(Vector3::new(xmax, y, z)) {
                         break;
                     }
 
@@ -274,9 +285,7 @@ impl Chunk {
                     zmax = z_ + 1;
 
                     for x_ in x..xmax {
-                        if visited.contains(&(x_, zmax))
-                            || self.highlighted == Some(Vector3::new(x_, y, zmax))
-                        {
+                        if visited.contains(&(x_, zmax)) || hl == Some(Vector3::new(x_, y, zmax)) {
                             break 'z;
                         }
 
@@ -296,7 +305,14 @@ impl Chunk {
                 }
 
                 let quad = Quad::new(x as i32, z as i32, (xmax - x) as i32, (zmax - z) as i32);
-                quads.push((block_type, y as i32, offset, quad, false, quad_faces));
+                quads.push((
+                    block_type,
+                    y as i32,
+                    offset,
+                    quad,
+                    Vector3::zero(),
+                    quad_faces,
+                ));
             }
         }
 
@@ -304,7 +320,7 @@ impl Chunk {
     }
 
     fn quads_to_geometry(
-        quads: Vec<(BlockType, i32, Vector3<i32>, Quad, bool, FaceFlags)>,
+        quads: Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)>,
     ) -> (Vec<Vertex>, Vec<u16>) {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
@@ -329,12 +345,17 @@ impl Chunk {
         (vertices, indices)
     }
 
-    pub fn to_geometry(&self, offset: Vector3<i32>) -> (Vec<Vertex>, Vec<u16>) {
-        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad, bool, FaceFlags)> = Vec::new();
+    pub fn to_geometry(
+        &self,
+        offset: Vector3<i32>,
+        highlighted: Option<&(Vector3<usize>, Vector3<i32>)>,
+    ) -> (Vec<Vertex>, Vec<u16>) {
+        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)> =
+            Vec::new();
 
         for y in 0..CHUNK_SIZE {
             let (culled, mut queue) = self.cull_layer(y);
-            let mut layer_quads = self.layer_to_quads(y, offset, culled, &mut queue);
+            let mut layer_quads = self.layer_to_quads(y, offset, culled, &mut queue, highlighted);
             quads.append(&mut layer_quads);
         }
 
@@ -342,11 +363,11 @@ impl Chunk {
     }
 
     pub fn get_block(&self, x: usize, y: usize, z: usize) -> Option<&Block> {
-        self.blocks
-            .get(y)
-            .and_then(|blocks| blocks.get(z))
-            .and_then(|blocks| blocks.get(x))
-            .and_then(|block| block.as_ref())
+        if x >= CHUNK_SIZE || y >= CHUNK_SIZE || z >= CHUNK_SIZE {
+            return None;
+        }
+
+        self.blocks[y][z][x].as_ref()
     }
 
     fn calc_scale(vector: Vector3<f32>, scalar: f32) -> f32 {
@@ -360,9 +381,11 @@ impl Chunk {
     #[allow(dead_code)]
     pub fn raycast(
         &self,
+        chunk_position: Vector3<usize>,
         origin: Vector3<f32>,
         direction: Vector3<f32>,
     ) -> Option<(Vector3<usize>, Vector3<i32>)> {
+        let origin = origin - chunk_position.map(|x| (x * 16) as f32);
         let scale = Vector3::new(
             Self::calc_scale(direction, direction.x),
             Self::calc_scale(direction, direction.y),

@@ -61,7 +61,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
         texture_array,
         texture_sampler,
         in.texture_coordinates.xy,
-        i32(in.texture_coordinates.z)
+        i32(round(in.texture_coordinates.z))
     );
 
     let light_position = vec3<f32>(-100.0, 500.0, -200.0);

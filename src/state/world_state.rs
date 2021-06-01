@@ -1,13 +1,19 @@
 use std::time::{Duration, Instant};
 
 use ahash::AHashMap;
-use cgmath::Vector3;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use winit::dpi::PhysicalSize;
+use cgmath::{EuclideanSpace, InnerSpace, Rad, Vector2, Vector3};
+use wgpu::{
+    util::{BufferInitDescriptor, DeviceExt},
+    CommandEncoder, SwapChainTexture,
+};
+use winit::{
+    dpi::PhysicalSize,
+    event::{ElementState, VirtualKeyCode},
+};
 
 use crate::{
     camera::{Camera, Projection},
-    chunk::CHUNK_SIZE,
+    chunk::{Block, BlockType, CHUNK_SIZE},
     texture::{Texture, TextureManager},
     time::Time,
     uniforms::Uniforms,
@@ -34,6 +40,11 @@ pub struct WorldState {
     shader: wgpu::ShaderModule,
     render_pipeline_layout: wgpu::PipelineLayout,
     pub highlighted: Option<(Vector3<usize>, Vector3<i32>)>,
+
+    pub right_speed: f32,
+    pub forward_speed: f32,
+    pub up_speed: f32,
+    pub sprinting: bool,
 }
 
 impl WorldState {
@@ -339,6 +350,11 @@ impl WorldState {
             chunk_buffers: AHashMap::new(),
             wireframe: false,
             highlighted: None,
+
+            right_speed: 0.0,
+            forward_speed: 0.0,
+            up_speed: 0.0,
+            sprinting: false,
         };
 
         world_state.update_world_geometry(render_device);
@@ -346,7 +362,175 @@ impl WorldState {
         world_state
     }
 
-    pub fn update(&mut self, dt: Duration, render_queue: &wgpu::Queue) {
+    pub fn render(&self, frame: &SwapChainTexture, render_encoder: &mut CommandEncoder) -> usize {
+        let mut triangle_count = 0;
+
+        let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("render_pass"),
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: &frame.view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.502,
+                        g: 0.663,
+                        b: 0.965,
+                        a: 1.0,
+                    }),
+                    store: true,
+                },
+            }],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.depth_texture.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
+        });
+
+        render_pass.set_pipeline(&self.render_pipeline);
+
+        let tm = &self.texture_manager;
+        render_pass.set_bind_group(0, tm.bind_group.as_ref().unwrap(), &[]);
+        render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
+        render_pass.set_bind_group(2, &self.time_bind_group, &[]);
+
+        let camera_pos = self.camera.position.to_vec();
+        let camera_pos = Vector2::new(camera_pos.x, camera_pos.z);
+
+        for (position, (chunk_vertices, chunk_indices, index_count)) in &self.chunk_buffers {
+            let pos = (position * CHUNK_SIZE).cast().unwrap();
+            let pos = Vector2::new(pos.x, pos.z);
+            if (pos - camera_pos).magnitude() > 300.0 {
+                continue;
+            }
+
+            render_pass.set_vertex_buffer(0, chunk_vertices.slice(..));
+            render_pass.set_index_buffer(chunk_indices.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..*index_count as u32, 0, 0..1);
+            triangle_count += index_count / 3;
+        }
+
+        triangle_count
+    }
+
+    pub fn update_camera(&mut self, dx: f64, dy: f64) {
+        let camera = &mut self.camera;
+        camera.yaw += Rad(dx as f32 * 0.003);
+        camera.pitch -= Rad(dy as f32 * 0.003);
+
+        if camera.pitch < Rad::from(cgmath::Deg(-80.0)) {
+            camera.pitch = Rad::from(cgmath::Deg(-80.0));
+        } else if camera.pitch > Rad::from(cgmath::Deg(89.9)) {
+            camera.pitch = Rad::from(cgmath::Deg(89.9));
+        }
+    }
+
+    fn update_aim(&mut self, render_device: &wgpu::Device) {
+        let camera = &self.camera;
+
+        let old = self.highlighted;
+        let new = self
+            .world
+            .raycast(camera.position.to_vec(), camera.direction());
+
+        let old_chunk = old.map(|h| h.0 / CHUNK_SIZE);
+        let new_chunk = new.map(|h| h.0 / CHUNK_SIZE);
+
+        if old != new {
+            self.highlighted = new;
+
+            if let Some(old_chunk_) = old_chunk {
+                self.update_chunk_geometry(&render_device, old_chunk_);
+            }
+
+            if let Some(new_chunk_) = new_chunk {
+                // Don't update the same chunk twice
+                if old_chunk != new_chunk {
+                    self.update_chunk_geometry(&render_device, new_chunk_);
+                }
+            }
+        }
+    }
+
+    pub fn input_mouse_button(&mut self, button: u32, render_device: &wgpu::Device) {
+        let camera = &self.camera;
+
+        let world = &mut self.world;
+        if let Some((pos, axis)) = world.raycast(camera.position.to_vec(), camera.direction()) {
+            if button == 1 {
+                world.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
+                self.update_chunk_geometry(&render_device, pos / CHUNK_SIZE);
+            } else if button == 3 {
+                let new_pos = pos.cast().unwrap() - axis;
+
+                world.set_block(
+                    new_pos.x as isize,
+                    new_pos.y as isize,
+                    new_pos.z as isize,
+                    Some(Block {
+                        block_type: BlockType::Cobblestone,
+                    }),
+                );
+
+                self.update_chunk_geometry(&render_device, pos / CHUNK_SIZE);
+            }
+        }
+    }
+
+    pub fn input_keyboard(&mut self, key_code: &VirtualKeyCode, state: &ElementState) {
+        let amount = if state == &ElementState::Pressed {
+            1.0
+        } else {
+            -1.0
+        };
+
+        match key_code {
+            VirtualKeyCode::W => self.forward_speed += amount,
+            VirtualKeyCode::S => self.forward_speed -= amount,
+            VirtualKeyCode::A => self.right_speed -= amount,
+            VirtualKeyCode::D => self.right_speed += amount,
+            VirtualKeyCode::LShift => self.up_speed -= amount,
+            VirtualKeyCode::LControl => self.sprinting = state == &ElementState::Pressed,
+            VirtualKeyCode::Space => self.up_speed += amount,
+            _ => (),
+        }
+    }
+
+    fn update_position(&mut self, dt: Duration) {
+        let dt_seconds = dt.as_secs_f32();
+        let (yaw_sin, yaw_cos) = self.camera.yaw.0.sin_cos();
+
+        let speed = 30.0 * (self.sprinting as i32 * 2 + 1) as f32;
+
+        let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
+        self.camera.position += forward * self.forward_speed * speed * dt_seconds;
+
+        let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
+        self.camera.position += right * self.right_speed * speed * dt_seconds;
+
+        self.camera.position += Vector3::unit_y() * self.up_speed * speed * dt_seconds;
+    }
+
+    pub fn update(
+        &mut self,
+        dt: Duration,
+        render_device: &wgpu::Device,
+        render_queue: &wgpu::Queue,
+    ) {
+        self.update_position(dt);
+        self.update_aim(render_device);
+
+        self.uniforms
+            .update_view_projection(&self.camera, &self.projection);
+        render_queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.uniforms]),
+        );
+
         self.time.time += dt.as_secs_f32();
         render_queue.write_buffer(&self.time_buffer, 0, &bytemuck::cast_slice(&[self.time]));
     }

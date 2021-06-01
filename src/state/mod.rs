@@ -3,7 +3,6 @@ pub mod world_state;
 
 use std::time::Duration;
 
-use cgmath::{EuclideanSpace, InnerSpace, Rad, Vector2, Vector3};
 use winit::{
     event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
     window::Window,
@@ -11,8 +10,6 @@ use winit::{
 
 use hud_state::HudState;
 use world_state::WorldState;
-
-use crate::chunk::{Block, BlockType, CHUNK_SIZE};
 
 pub struct State {
     pub window_size: winit::dpi::PhysicalSize<u32>,
@@ -26,11 +23,7 @@ pub struct State {
     world_state: WorldState,
     hud_state: HudState,
 
-    right_speed: f32,
-    forward_speed: f32,
-    up_speed: f32,
     pub mouse_grabbed: bool,
-    sprinting: bool,
 }
 
 impl State {
@@ -109,10 +102,6 @@ impl State {
             world_state,
             hud_state,
 
-            right_speed: 0.0,
-            forward_speed: 0.0,
-            up_speed: 0.0,
-            sprinting: false,
             mouse_grabbed: false,
         }
     }
@@ -132,74 +121,17 @@ impl State {
     }
 
     fn input_keyboard(&mut self, key_code: &VirtualKeyCode, state: &ElementState) {
-        let amount = if state == &ElementState::Pressed {
-            1.0
-        } else {
-            -1.0
-        };
-
         match key_code {
-            VirtualKeyCode::W => self.forward_speed += amount,
-            VirtualKeyCode::S => self.forward_speed -= amount,
-            VirtualKeyCode::A => self.right_speed -= amount,
-            VirtualKeyCode::D => self.right_speed += amount,
-            VirtualKeyCode::LShift => self.up_speed -= amount,
-            VirtualKeyCode::LControl => self.sprinting = state == &ElementState::Pressed,
-            VirtualKeyCode::Space => self.up_speed += amount,
             VirtualKeyCode::F1 if state == &ElementState::Pressed => self
                 .world_state
                 .toggle_wireframe(&self.render_device, &self.swap_chain_descriptor),
-            _ => (),
-        }
-    }
-
-    fn update_camera(&mut self, dx: f64, dy: f64) {
-        let camera = &mut self.world_state.camera;
-        camera.yaw += Rad(dx as f32 * 0.003);
-        camera.pitch -= Rad(dy as f32 * 0.003);
-
-        if camera.pitch < Rad::from(cgmath::Deg(-80.0)) {
-            camera.pitch = Rad::from(cgmath::Deg(-80.0));
-        } else if camera.pitch > Rad::from(cgmath::Deg(89.9)) {
-            camera.pitch = Rad::from(cgmath::Deg(89.9));
-        }
-    }
-
-    fn update_aim(&mut self) {
-        let camera = &self.world_state.camera;
-
-        let old = self.world_state.highlighted;
-        let new = self
-            .world_state
-            .world
-            .raycast(camera.position.to_vec(), camera.direction());
-
-        let old_chunk = old.map(|h| h.0 / CHUNK_SIZE);
-        let new_chunk = new.map(|h| h.0 / CHUNK_SIZE);
-
-        if old != new {
-            self.world_state.highlighted = new;
-
-            if let Some(old_chunk_) = old_chunk {
-                self.world_state
-                    .update_chunk_geometry(&self.render_device, old_chunk_);
-            }
-
-            if let Some(new_chunk_) = new_chunk {
-                // Don't update the same chunk twice
-                if old_chunk != new_chunk {
-                    self.world_state
-                        .update_chunk_geometry(&self.render_device, new_chunk_);
-                }
-            }
-
-            // println!("Aiming at {:?}", new);
+            _ => self.world_state.input_keyboard(key_code, state),
         }
     }
 
     fn input_mouse(&mut self, dx: f64, dy: f64) {
         if self.mouse_grabbed {
-            self.update_camera(dx, dy);
+            self.world_state.update_camera(dx, dy);
         }
     }
 
@@ -214,70 +146,17 @@ impl State {
             DeviceEvent::Button {
                 button,
                 state: ElementState::Pressed,
-            } if self.mouse_grabbed => {
-                let camera = &self.world_state.camera;
-
-                let world = &mut self.world_state.world;
-                if let Some((pos, axis)) =
-                    world.raycast(camera.position.to_vec(), camera.direction())
-                {
-                    dbg!(&pos);
-                    if *button == 1 {
-                        world.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
-                        self.world_state
-                            .update_chunk_geometry(&self.render_device, pos / CHUNK_SIZE);
-                    } else if *button == 3 {
-                        let new_pos = pos.cast().unwrap() - axis;
-
-                        world.set_block(
-                            new_pos.x as isize,
-                            new_pos.y as isize,
-                            new_pos.z as isize,
-                            Some(Block {
-                                block_type: BlockType::Cobblestone,
-                            }),
-                        );
-
-                        self.world_state
-                            .update_chunk_geometry(&self.render_device, pos / CHUNK_SIZE);
-                    }
-                }
-            }
+            } if self.mouse_grabbed => self
+                .world_state
+                .input_mouse_button(*button, &self.render_device),
             DeviceEvent::MouseMotion { delta: (dx, dy) } => self.input_mouse(*dx, *dy),
             _ => (),
         }
     }
 
     pub fn update(&mut self, dt: Duration) {
-        let dt_secs = dt.as_secs_f32();
-
-        let (yaw_sin, yaw_cos) = self.world_state.camera.yaw.0.sin_cos();
-
-        let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        self.world_state.camera.position +=
-            forward * self.forward_speed * 30.0 * (self.sprinting as i32 * 2 + 1) as f32 * dt_secs;
-
-        let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        self.world_state.camera.position +=
-            right * self.right_speed * 30.0 * (self.sprinting as i32 * 2 + 1) as f32 * dt_secs;
-
-        let up = Vector3::new(0.0, 1.0, 0.0).normalize();
-        self.world_state.camera.position +=
-            up * self.up_speed * 30.0 * (self.sprinting as i32 * 2 + 1) as f32 * dt_secs;
-
-        self.world_state.update(dt, &self.render_queue);
-
-        self.update_aim();
-
         self.world_state
-            .uniforms
-            .update_view_projection(&self.world_state.camera, &self.world_state.projection);
-
-        self.render_queue.write_buffer(
-            &self.world_state.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[self.world_state.uniforms]),
-        );
+            .update(dt, &self.render_device, &self.render_queue);
     }
 
     pub fn render(&mut self) -> anyhow::Result<usize> {
@@ -288,59 +167,7 @@ impl State {
             .create_command_encoder(&Default::default());
 
         let mut triangle_count = 0;
-
-        {
-            let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("render_pass"),
-                color_attachments: &[wgpu::RenderPassColorAttachment {
-                    view: &frame.view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.502,
-                            g: 0.663,
-                            b: 0.965,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.world_state.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
-                    }),
-                    stencil_ops: None,
-                }),
-            });
-
-            render_pass.set_pipeline(&self.world_state.render_pipeline);
-
-            let tm = &self.world_state.texture_manager;
-            render_pass.set_bind_group(0, tm.bind_group.as_ref().unwrap(), &[]);
-            render_pass.set_bind_group(1, &self.world_state.uniform_bind_group, &[]);
-            render_pass.set_bind_group(2, &self.world_state.time_bind_group, &[]);
-
-            let camera_pos = self.world_state.camera.position.to_vec();
-            let camera_pos = Vector2::new(camera_pos.x, camera_pos.z);
-
-            for (position, (chunk_vertices, chunk_indices, index_count)) in
-                &self.world_state.chunk_buffers
-            {
-                let pos = (position * CHUNK_SIZE).cast().unwrap();
-                let pos = Vector2::new(pos.x, pos.z);
-                if (pos - camera_pos).magnitude() > 300.0 {
-                    continue;
-                }
-
-                render_pass.set_vertex_buffer(0, chunk_vertices.slice(..));
-                render_pass.set_index_buffer(chunk_indices.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(0..*index_count as u32, 0, 0..1);
-                triangle_count += index_count / 3;
-            }
-        }
-
+        triangle_count += self.world_state.render(&frame, &mut render_encoder);
         triangle_count += self.hud_state.render(&frame, &mut render_encoder)?;
 
         self.render_queue

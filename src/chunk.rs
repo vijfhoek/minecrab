@@ -2,7 +2,7 @@ use std::{collections::VecDeque, convert::TryInto, usize};
 
 use crate::{cube, quad::Quad, vertex::Vertex};
 use ahash::{AHashMap, AHashSet};
-use cgmath::{InnerSpace, Vector3, Zero};
+use cgmath::{Vector3, Zero};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
 
 #[allow(dead_code)]
@@ -52,7 +52,7 @@ pub struct Block {
     pub block_type: BlockType,
 }
 
-pub(crate) const CHUNK_SIZE: usize = 16;
+pub const CHUNK_SIZE: usize = 64;
 
 type ChunkBlocks = [[[Option<Block>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
 
@@ -64,8 +64,8 @@ impl Chunk {
     pub fn generate(chunk_x: i32, chunk_y: i32, chunk_z: i32) -> Self {
         let fbm = noise::Fbm::new();
 
-        const TERRAIN_NOISE_SCALE: f64 = 0.1;
-        const TERRAIN_NOISE_OFFSET: f64 = 0.0;
+        const TERRAIN_NOISE_SCALE: f64 = 0.1 / 16.0 * CHUNK_SIZE as f64;
+        const TERRAIN_NOISE_OFFSET: f64 = 0.0 / 16.0 * CHUNK_SIZE as f64;
         let terrain_noise = PlaneMapBuilder::new(&fbm)
             .set_size(CHUNK_SIZE, CHUNK_SIZE)
             .set_x_bounds(
@@ -78,8 +78,8 @@ impl Chunk {
             )
             .build();
 
-        const STONE_NOISE_SCALE: f64 = 0.07;
-        const STONE_NOISE_OFFSET: f64 = 11239.0;
+        const STONE_NOISE_SCALE: f64 = 0.07 / 16.0 * CHUNK_SIZE as f64;
+        const STONE_NOISE_OFFSET: f64 = 11239.0 / 16.0 * CHUNK_SIZE as f64;
         let stone_noise = PlaneMapBuilder::new(&fbm)
             .set_size(CHUNK_SIZE, CHUNK_SIZE)
             .set_x_bounds(
@@ -92,7 +92,7 @@ impl Chunk {
             )
             .build();
 
-        let mut blocks: ChunkBlocks = Default::default();
+        let mut blocks: ChunkBlocks = [[[Default::default(); CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 let v = terrain_noise.get_value(x, z) * 20.0 + 128.0;
@@ -101,14 +101,14 @@ impl Chunk {
                 let s = stone_noise.get_value(x, z) * 20.0 + 4.5;
                 let s = (s.round() as i32).min(10).max(3);
 
-                let stone_max = (v - s - chunk_y * 16).min(CHUNK_SIZE as i32);
+                let stone_max = (v - s - chunk_y * CHUNK_SIZE as i32).min(CHUNK_SIZE as i32);
                 for y in 0..stone_max {
                     blocks[y as usize][z][x] = Some(Block {
                         block_type: BlockType::Stone,
                     });
                 }
 
-                let dirt_max = (v - chunk_y * 16).min(CHUNK_SIZE as i32);
+                let dirt_max = (v - chunk_y * CHUNK_SIZE as i32).min(CHUNK_SIZE as i32);
                 for y in stone_max.max(0)..dirt_max {
                     blocks[y as usize][z][x] = Some(Block {
                         block_type: BlockType::Dirt,

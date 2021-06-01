@@ -1532,6 +1532,7 @@ dependencies = [
  "image",
  "log",
  "noise",
+ "rayon",
  "wgpu",
  "winit",
 ]

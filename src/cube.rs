@@ -31,7 +31,7 @@ pub fn vertices(
     let mut current_index = start_index;
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
-    let highlighted: [f32; 3] = (-highlighted).map(|x| x as f32).into();
+    let highlighted: [f32; 3] = (-highlighted).cast().unwrap().into();
 
     if visible_faces & FACE_LEFT == FACE_LEFT {
         let normal = [-1.0,  0.0,  0.0];

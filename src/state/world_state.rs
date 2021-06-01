@@ -57,7 +57,7 @@ impl WorldState {
             swap_chain_descriptor.height,
             cgmath::Deg(45.0),
             0.1,
-            500.0,
+            5000.0,
         );
 
         (camera, projection)

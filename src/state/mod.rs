@@ -3,7 +3,7 @@ pub mod world_state;
 
 use std::time::Duration;
 
-use cgmath::{EuclideanSpace, InnerSpace, Rad, Vector3};
+use cgmath::{EuclideanSpace, InnerSpace, Rad, Vector2, Vector3};
 use winit::{
     event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode},
     window::Window,
@@ -225,9 +225,9 @@ impl State {
                     if *button == 1 {
                         world.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
                         self.world_state
-                            .update_chunk_geometry(&self.render_device, pos / 16);
+                            .update_chunk_geometry(&self.render_device, pos / CHUNK_SIZE);
                     } else if *button == 3 {
-                        let new_pos = pos.map(|x| x as i32) - axis;
+                        let new_pos = pos.cast().unwrap() - axis;
 
                         world.set_block(
                             new_pos.x as isize,
@@ -239,7 +239,7 @@ impl State {
                         );
 
                         self.world_state
-                            .update_chunk_geometry(&self.render_device, pos / 16);
+                            .update_chunk_geometry(&self.render_device, pos / CHUNK_SIZE);
                     }
                 }
             }
@@ -322,9 +322,18 @@ impl State {
             render_pass.set_bind_group(1, &self.world_state.uniform_bind_group, &[]);
             render_pass.set_bind_group(2, &self.world_state.time_bind_group, &[]);
 
-            for (chunk_vertices, chunk_indices, index_count) in
-                self.world_state.chunk_buffers.values()
+            let camera_pos = self.world_state.camera.position.to_vec();
+            let camera_pos = Vector2::new(camera_pos.x, camera_pos.z);
+
+            for (position, (chunk_vertices, chunk_indices, index_count)) in
+                &self.world_state.chunk_buffers
             {
+                let pos = (position * CHUNK_SIZE).cast().unwrap();
+                let pos = Vector2::new(pos.x, pos.z);
+                if (pos - camera_pos).magnitude() > 300.0 {
+                    continue;
+                }
+
                 render_pass.set_vertex_buffer(0, chunk_vertices.slice(..));
                 render_pass.set_index_buffer(chunk_indices.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..*index_count as u32, 0, 0..1);

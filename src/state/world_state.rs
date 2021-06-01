@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use ahash::AHashMap;
-use cgmath::{EuclideanSpace, InnerSpace, Rad, Vector2, Vector3};
+use cgmath::{EuclideanSpace, InnerSpace, Point3, Rad, Vector2, Vector3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     CommandEncoder, SwapChainTexture,
@@ -57,7 +57,7 @@ impl WorldState {
 
     fn create_camera(render_context: &RenderContext) -> (Camera, Projection) {
         let camera = Camera::new(
-            (-10.0, 140.0, -10.0).into(),
+            (10.0, 140.0, 10.0).into(),
             cgmath::Deg(45.0).into(),
             cgmath::Deg(-20.0).into(),
         );
@@ -499,26 +499,56 @@ impl WorldState {
             VirtualKeyCode::S => self.forward_speed -= amount,
             VirtualKeyCode::A => self.right_speed -= amount,
             VirtualKeyCode::D => self.right_speed += amount,
-            VirtualKeyCode::LShift => self.up_speed -= amount,
+            // VirtualKeyCode::LShift => self.up_speed -= amount,
+            VirtualKeyCode::Space if state == &ElementState::Pressed => self.up_speed = 0.6,
             VirtualKeyCode::LControl => self.sprinting = state == &ElementState::Pressed,
-            VirtualKeyCode::Space => self.up_speed += amount,
             _ => (),
         }
+    }
+
+    fn check_collision(&self, position: Point3<f32>) -> bool {
+        self.world
+            .get_block(
+                position.x as isize,
+                (position.y - 1.62) as isize,
+                position.z as isize,
+            )
+            .is_some()
     }
 
     fn update_position(&mut self, dt: Duration) {
         let dt_seconds = dt.as_secs_f32();
         let (yaw_sin, yaw_cos) = self.camera.yaw.0.sin_cos();
 
-        let speed = 30.0 * (self.sprinting as i32 * 2 + 1) as f32;
+        let speed = 10.0 * (self.sprinting as i32 * 2 + 1) as f32;
+
+        let mut new_position = self.camera.position;
+
+        let up = Vector3::unit_y() * self.up_speed * speed * dt_seconds;
+        new_position += up;
+        if self.check_collision(new_position) {
+            new_position -= up;
+            self.up_speed = 0.0;
+        }
 
         let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        self.camera.position += forward * self.forward_speed * speed * dt_seconds;
+        let forward = forward * self.forward_speed * speed * dt_seconds;
+        new_position += forward;
+        if self.check_collision(new_position) {
+            new_position -= forward;
+        }
 
         let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        self.camera.position += right * self.right_speed * speed * dt_seconds;
+        let right = right * self.right_speed * speed * dt_seconds;
+        new_position += right;
+        if self.check_collision(new_position) {
+            new_position -= right;
+        }
 
-        self.camera.position += Vector3::unit_y() * self.up_speed * speed * dt_seconds;
+        self.camera.position = new_position;
+
+        self.up_speed -= 1.6 * dt.as_secs_f32();
+        self.up_speed *= 0.98_f32.powf(dt.as_secs_f32() / 20.0);
     }
 
     pub fn update(&mut self, dt: Duration, render_context: &RenderContext) {

@@ -160,6 +160,7 @@ impl TextureManager {
                 address_mode_u: wgpu::AddressMode::Repeat,
                 address_mode_v: wgpu::AddressMode::Repeat,
                 address_mode_w: wgpu::AddressMode::Repeat,
+                mag_filter: wgpu::FilterMode::Linear,
                 ..wgpu::SamplerDescriptor::default()
             });
 

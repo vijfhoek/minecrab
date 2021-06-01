@@ -10,6 +10,7 @@ mod vertex;
 mod world;
 mod render_context;
 mod text_renderer;
+mod aabb;
 
 use std::time::{Duration, Instant};
 use wgpu::SwapChainError;

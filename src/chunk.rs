@@ -321,13 +321,13 @@ impl Chunk {
         offset: Vector3<i32>,
         highlighted: Option<&(Vector3<usize>, Vector3<i32>)>,
     ) -> Geometry<BlockVertex> {
-        let mut quads: Vec<Quad> = Vec::new();
-
-        for y in 0..CHUNK_SIZE {
-            let (culled, mut queue) = self.cull_layer(y);
-            let mut layer_quads = self.layer_to_quads(y, offset, culled, &mut queue, highlighted);
-            quads.append(&mut layer_quads);
-        }
+        let quads: Vec<Quad> = (0..CHUNK_SIZE)
+            .into_par_iter()
+            .flat_map(|y| {
+                let (culled, mut queue) = self.cull_layer(y);
+                self.layer_to_quads(y, offset, culled, &mut queue, highlighted)
+            })
+            .collect();
 
         Self::quads_to_geometry(quads)
     }

@@ -4,7 +4,7 @@ use ahash::AHashMap;
 use cgmath::{EuclideanSpace, InnerSpace, Point3, Rad, Vector2, Vector3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    CommandEncoder, SwapChainTexture,
+    BufferUsage, CommandEncoder, SwapChainTexture,
 };
 use winit::{
     dpi::PhysicalSize,
@@ -14,19 +14,20 @@ use winit::{
 use crate::{
     camera::{Camera, Projection},
     chunk::{Block, BlockType, CHUNK_SIZE},
+    geometry::GeometryBuffers,
     render_context::RenderContext,
     texture::{Texture, TextureManager},
     time::Time,
-    uniforms::Uniforms,
-    vertex::Vertex,
+    vertex::{BlockVertex, Vertex},
+    view::View,
     world::World,
 };
 
 pub struct WorldState {
     pub render_pipeline: wgpu::RenderPipeline,
-    pub uniforms: Uniforms,
-    pub uniform_buffer: wgpu::Buffer,
-    pub uniform_bind_group: wgpu::BindGroup,
+    pub view: View,
+    pub view_buffer: wgpu::Buffer,
+    pub view_bind_group: wgpu::BindGroup,
     pub texture_manager: TextureManager,
     pub camera: Camera,
     pub projection: Projection,
@@ -34,7 +35,7 @@ pub struct WorldState {
     pub time_bind_group: wgpu::BindGroup,
     pub world: World,
 
-    pub chunk_buffers: AHashMap<Vector3<usize>, (wgpu::Buffer, wgpu::Buffer, usize)>,
+    pub chunk_buffers: AHashMap<Vector3<usize>, GeometryBuffers>,
     time: Time,
     time_buffer: wgpu::Buffer,
     wireframe: bool,
@@ -77,28 +78,23 @@ impl WorldState {
         (camera, projection)
     }
 
-    fn create_uniforms(
+    fn create_view(
         camera: &Camera,
         projection: &Projection,
         render_context: &RenderContext,
-    ) -> (
-        Uniforms,
-        wgpu::Buffer,
-        wgpu::BindGroupLayout,
-        wgpu::BindGroup,
-    ) {
-        let mut uniforms = Uniforms::new();
-        uniforms.update_view_projection(camera, projection);
+    ) -> (View, wgpu::Buffer, wgpu::BindGroupLayout, wgpu::BindGroup) {
+        let mut view = View::new();
+        view.update_view_projection(camera, projection);
 
-        let uniform_buffer = render_context
+        let view_buffer = render_context
             .device
             .create_buffer_init(&BufferInitDescriptor {
-                label: Some("uniform_buffer"),
-                contents: bytemuck::cast_slice(&[uniforms]),
+                label: Some("view_buffer"),
+                contents: bytemuck::cast_slice(&[view]),
                 usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             });
 
-        let uniform_bind_group_layout =
+        let view_bind_group_layout =
             render_context
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -112,27 +108,21 @@ impl WorldState {
                         },
                         count: None,
                     }],
-                    label: Some("uniform_bind_group_layout"),
+                    label: Some("view_bind_group_layout"),
                 });
 
-        let uniform_bind_group =
-            render_context
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: &uniform_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: uniform_buffer.as_entire_binding(),
-                    }],
-                    label: Some("uniform_bind_group"),
-                });
+        let view_bind_group = render_context
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &view_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: view_buffer.as_entire_binding(),
+                }],
+                label: Some("view_bind_group"),
+            });
 
-        (
-            uniforms,
-            uniform_buffer,
-            uniform_bind_group_layout,
-            uniform_bind_group,
-        )
+        (view, view_buffer, view_bind_group_layout, view_bind_group)
     }
 
     fn create_time(
@@ -193,7 +183,7 @@ impl WorldState {
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: "main",
-                    buffers: &[Vertex::desc()],
+                    buffers: &[BlockVertex::descriptor()],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
@@ -232,52 +222,35 @@ impl WorldState {
 
         let world_geometry = self.world.to_geometry(self.highlighted);
         self.chunk_buffers.clear();
-        for (chunk_position, chunk_vertices, chunk_indices) in world_geometry {
-            self.chunk_buffers.insert(
-                chunk_position,
-                (
-                    render_context
-                        .device
-                        .create_buffer_init(&BufferInitDescriptor {
-                            label: None,
-                            contents: &bytemuck::cast_slice(&chunk_vertices),
-                            usage: wgpu::BufferUsage::VERTEX,
-                        }),
-                    render_context
-                        .device
-                        .create_buffer_init(&BufferInitDescriptor {
-                            label: None,
-                            contents: &bytemuck::cast_slice(&chunk_indices),
-                            usage: wgpu::BufferUsage::INDEX,
-                        }),
-                    chunk_indices.len(),
-                ),
+        for (chunk_position, chunk_geometry) in world_geometry {
+            let buffers = GeometryBuffers::from_geometry(
+                render_context,
+                &chunk_geometry,
+                BufferUsage::empty(),
             );
+            self.chunk_buffers.insert(chunk_position, buffers);
         }
 
         let elapsed = instant.elapsed();
         println!("World update took {:?}", elapsed);
     }
 
-    pub fn load_npc_geometry(
-        &mut self,
-        render_context: &RenderContext,
-    ) {
-        self.world.npc.vertex_buffer = Some(render_context
-        .device
-        .create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: &bytemuck::cast_slice(&self.world.npc.vertices),
-            usage: wgpu::BufferUsage::VERTEX,
-        }));
+    pub fn load_npc_geometry(&mut self, render_context: &RenderContext) {
+        self.world.npc.vertex_buffer = Some(render_context.device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: None,
+                contents: &bytemuck::cast_slice(&self.world.npc.vertices),
+                usage: wgpu::BufferUsage::VERTEX,
+            },
+        ));
 
-        self.world.npc.index_buffer = Some(render_context
-        .device
-        .create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: &bytemuck::cast_slice(&self.world.npc.indices),
-            usage: wgpu::BufferUsage::INDEX,
-        }));
+        self.world.npc.index_buffer = Some(render_context.device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: None,
+                contents: &bytemuck::cast_slice(&self.world.npc.indices),
+                usage: wgpu::BufferUsage::INDEX,
+            },
+        ));
     }
 
     pub fn update_chunk_geometry(
@@ -287,31 +260,14 @@ impl WorldState {
     ) {
         let chunk = &mut self.world.chunks[chunk_position.y][chunk_position.z][chunk_position.x];
         let offset = chunk_position.map(|f| (f * CHUNK_SIZE) as i32);
-        let (vertices, indices) = chunk.to_geometry(
+        let geometry = chunk.to_geometry(
             offset,
             World::highlighted_for_chunk(self.highlighted, chunk_position).as_ref(),
         );
 
-        self.chunk_buffers.insert(
-            chunk_position,
-            (
-                render_context
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: &bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsage::VERTEX,
-                    }),
-                render_context
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: &bytemuck::cast_slice(&indices),
-                        usage: wgpu::BufferUsage::INDEX,
-                    }),
-                indices.len(),
-            ),
-        );
+        let buffers =
+            GeometryBuffers::from_geometry(render_context, &geometry, BufferUsage::empty());
+        self.chunk_buffers.insert(chunk_position, buffers);
     }
 
     pub fn toggle_wireframe(&mut self, render_context: &RenderContext) {
@@ -331,8 +287,8 @@ impl WorldState {
 
         let (camera, projection) = Self::create_camera(render_context);
 
-        let (uniforms, uniform_buffer, world_uniform_layout, uniform_bind_group) =
-            Self::create_uniforms(&camera, &projection, render_context);
+        let (view, view_buffer, view_bind_group_layout, view_bind_group) =
+            Self::create_view(&camera, &projection, render_context);
 
         let (time, time_buffer, time_layout, time_bind_group) = Self::create_time(render_context);
 
@@ -352,7 +308,7 @@ impl WorldState {
                     push_constant_ranges: &[],
                     bind_group_layouts: &[
                         &texture_manager.bind_group_layout,
-                        &world_uniform_layout,
+                        &view_bind_group_layout,
                         &time_layout,
                     ],
                 });
@@ -364,9 +320,9 @@ impl WorldState {
 
         let mut world_state = Self {
             render_pipeline,
-            uniforms,
-            uniform_buffer,
-            uniform_bind_group,
+            view,
+            view_buffer,
+            view_bind_group,
             texture_manager,
             camera,
             projection,
@@ -430,23 +386,22 @@ impl WorldState {
 
         let tm = &self.texture_manager;
         render_pass.set_bind_group(0, tm.bind_group.as_ref().unwrap(), &[]);
-        render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.view_bind_group, &[]);
         render_pass.set_bind_group(2, &self.time_bind_group, &[]);
 
         let camera_pos = self.camera.position.to_vec();
         let camera_pos = Vector2::new(camera_pos.x, camera_pos.z);
 
-        for (position, (chunk_vertices, chunk_indices, index_count)) in &self.chunk_buffers {
+        for (position, buffers) in &self.chunk_buffers {
             let pos = (position * CHUNK_SIZE).cast().unwrap();
             let pos = Vector2::new(pos.x, pos.z);
             if (pos - camera_pos).magnitude() > 300.0 {
                 continue;
             }
 
-            render_pass.set_vertex_buffer(0, chunk_vertices.slice(..));
-            render_pass.set_index_buffer(chunk_indices.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..*index_count as u32, 0, 0..1);
-            triangle_count += index_count / 3;
+            buffers.set_buffers(&mut render_pass);
+            buffers.draw_indexed(&mut render_pass);
+            triangle_count += buffers.index_count / 3;
         }
 
         {
@@ -454,8 +409,9 @@ impl WorldState {
             let index_buffer = self.world.npc.index_buffer.as_ref();
 
             render_pass.set_vertex_buffer(0, vertex_buffer.unwrap().slice(..));
-            render_pass.set_index_buffer(index_buffer.unwrap().slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw_indexed(0..self.world.npc.indices.len() as u32 , 0, 0..1);
+            render_pass
+                .set_index_buffer(index_buffer.unwrap().slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..self.world.npc.indices.len() as u32, 0, 0..1);
         }
 
         triangle_count
@@ -504,12 +460,14 @@ impl WorldState {
         let camera = &self.camera;
 
         let world = &mut self.world;
-        if let Some((pos, axis)) = world.raycast(camera.position.to_vec(), camera.direction()) {
+        if let Some((pos, face_normal)) =
+            world.raycast(camera.position.to_vec(), camera.direction())
+        {
             if button == &MouseButton::Left {
                 world.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
                 self.update_chunk_geometry(render_context, pos / CHUNK_SIZE);
             } else if button == &MouseButton::Right {
-                let new_pos = pos.cast().unwrap() - axis;
+                let new_pos = pos.cast().unwrap() + face_normal;
 
                 world.set_block(
                     new_pos.x as isize,
@@ -525,8 +483,8 @@ impl WorldState {
         }
     }
 
-    pub fn input_keyboard(&mut self, key_code: &VirtualKeyCode, state: &ElementState) {
-        let pressed = state == &ElementState::Pressed;
+    pub fn input_keyboard(&mut self, key_code: VirtualKeyCode, state: ElementState) {
+        let pressed = state == ElementState::Pressed;
         match key_code {
             VirtualKeyCode::W => self.forward_pressed = pressed,
             VirtualKeyCode::S => self.backward_pressed = pressed,
@@ -545,13 +503,9 @@ impl WorldState {
                 }
             }
             VirtualKeyCode::LShift if self.creative => {
-                self.up_speed = if pressed {
-                    -1.0
-                } else {
-                    0.0
-                }
+                self.up_speed = if pressed { -1.0 } else { 0.0 }
             }
-            VirtualKeyCode::LControl => self.sprinting = state == &ElementState::Pressed,
+            VirtualKeyCode::LControl => self.sprinting = state == ElementState::Pressed,
             _ => (),
         }
     }
@@ -609,13 +563,11 @@ impl WorldState {
         self.update_position(dt);
         self.update_aim(render_context);
 
-        self.uniforms
+        self.view
             .update_view_projection(&self.camera, &self.projection);
-        render_context.queue.write_buffer(
-            &self.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[self.uniforms]),
-        );
+        render_context
+            .queue
+            .write_buffer(&self.view_buffer, 0, bytemuck::cast_slice(&[self.view]));
 
         self.time.time += dt.as_secs_f32();
         render_context.queue.write_buffer(

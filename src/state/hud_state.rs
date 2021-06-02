@@ -1,40 +1,36 @@
 use std::time::{Duration, Instant};
 
 use cgmath::Vector3;
-use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
-    CommandEncoder, SwapChainTexture,
-};
+use wgpu::{BufferUsage, CommandEncoder, SwapChainTexture};
 
 use crate::{
+    geometry::{Geometry, GeometryBuffers},
     render_context::RenderContext,
+    state::PRIMITIVE_STATE,
     text_renderer::{self, TextRenderer},
     texture::Texture,
-    vertex::Vertex,
+    vertex::{HudVertex, Vertex},
 };
 
+// TODO update aspect ratio when resizing
 const UI_SCALE_X: f32 = 0.0045;
 const UI_SCALE_Y: f32 = 0.008;
 
 pub struct HudState {
     texture_bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
-    crosshair_vertex_buffer: wgpu::Buffer,
-    crosshair_index_buffer: wgpu::Buffer,
+    hud_geometry_buffers: GeometryBuffers,
 
     text_renderer: TextRenderer,
 
-    fps_vertex_buffer: wgpu::Buffer,
-    fps_index_buffer: wgpu::Buffer,
-    fps_index_count: usize,
+    fps_geometry_buffers: GeometryBuffers,
     fps_instant: Instant,
     fps_frames: u32,
     fps_elapsed: Duration,
 
-    coordinates_vertex_buffer: wgpu::Buffer,
-    coordinates_index_buffer: wgpu::Buffer,
-    coordinates_index_count: usize,
+    coordinates_geometry_buffers: GeometryBuffers,
     coordinates_last: Vector3<f32>,
+    pub hotbar_cursor_position: i32,
 }
 
 impl HudState {
@@ -44,48 +40,37 @@ impl HudState {
         let render_pipeline =
             Self::create_render_pipeline(render_context, &[&texture_bind_group_layout]);
 
-        let crosshair_vertex_buffer =
-            render_context
-                .device
-                .create_buffer_init(&BufferInitDescriptor {
-                    label: Some("HUD crosshair vertex buffer"),
-                    contents: bytemuck::cast_slice(&CROSSHAIR_VERTICES),
-                    usage: wgpu::BufferUsage::VERTEX,
-                });
+        // HUD buffers
+        let hud_geometry = Geometry {
+            vertices: HUD_VERTICES.to_vec(),
+            indices: HUD_INDICES.to_vec(),
+        };
+        let hud_geometry_buffers =
+            GeometryBuffers::from_geometry(render_context, &hud_geometry, BufferUsage::COPY_DST);
 
-        let crosshair_index_buffer =
-            render_context
-                .device
-                .create_buffer_init(&BufferInitDescriptor {
-                    label: Some("HUD crosshair index buffer"),
-                    contents: bytemuck::cast_slice(CROSSHAIR_INDICES),
-                    usage: wgpu::BufferUsage::INDEX,
-                });
-
+        // Text buffers
         let text_renderer = TextRenderer::new(render_context).unwrap();
-        let (fps_vertex_buffer, fps_index_buffer, fps_index_count) =
+        let fps_geometry_buffers =
             text_renderer.string_to_buffers(&render_context, -0.98, 0.97, "");
-        let (coordinates_vertex_buffer, coordinates_index_buffer, coordinates_index_count) =
+        let coordinates_geometry_buffers =
             text_renderer.string_to_buffers(&render_context, -0.98, 0.97 - text_renderer::DY, "");
 
         Self {
             texture_bind_group,
             render_pipeline,
-            crosshair_vertex_buffer,
-            crosshair_index_buffer,
             text_renderer,
 
-            fps_vertex_buffer,
-            fps_index_buffer,
-            fps_index_count,
+            hud_geometry_buffers,
+
+            fps_geometry_buffers,
             fps_instant: Instant::now(),
             fps_frames: 0,
             fps_elapsed: Duration::from_secs(0),
 
-            coordinates_vertex_buffer,
-            coordinates_index_buffer,
-            coordinates_index_count,
+            coordinates_geometry_buffers,
             coordinates_last: Vector3::new(0.0, 0.0, 0.0),
+
+            hotbar_cursor_position: 0,
         }
     }
 
@@ -100,12 +85,9 @@ impl HudState {
             let fps = 1.0 / frametime.as_secs_f32();
 
             let string = format!("{:<5.0} fps", fps);
-            let (vertices, indices, index_count) =
+            self.fps_geometry_buffers =
                 self.text_renderer
                     .string_to_buffers(render_context, -0.98, 0.97, &string);
-            self.fps_vertex_buffer = vertices;
-            self.fps_index_buffer = indices;
-            self.fps_index_count = index_count;
 
             self.fps_elapsed = Duration::from_secs(0);
             self.fps_frames = 0;
@@ -113,15 +95,12 @@ impl HudState {
 
         if position != &self.coordinates_last {
             let string = format!("({:.1},{:.1},{:.1})", position.x, position.y, position.z,);
-            let (vertices, indices, index_count) = self.text_renderer.string_to_buffers(
+            self.coordinates_geometry_buffers = self.text_renderer.string_to_buffers(
                 render_context,
                 -0.98,
                 0.97 - text_renderer::DY * 1.3,
                 &string,
             );
-            self.coordinates_vertex_buffer = vertices;
-            self.coordinates_index_buffer = indices;
-            self.coordinates_index_count = index_count;
         }
     }
 
@@ -131,7 +110,6 @@ impl HudState {
         render_encoder: &mut CommandEncoder,
     ) -> anyhow::Result<usize> {
         let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("render_pass"),
             color_attachments: &[wgpu::RenderPassColorAttachment {
                 view: &frame.view,
                 resolve_target: None,
@@ -140,33 +118,58 @@ impl HudState {
                     store: true,
                 },
             }],
-            depth_stencil_attachment: None,
+            ..Default::default()
         });
 
         render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_vertex_buffer(0, self.crosshair_vertex_buffer.slice(..));
-        render_pass.set_index_buffer(
-            self.crosshair_index_buffer.slice(..),
-            wgpu::IndexFormat::Uint16,
-        );
 
+        // Render the HUD elements
+        self.hud_geometry_buffers.set_buffers(&mut render_pass);
         render_pass.set_bind_group(0, &self.texture_bind_group, &[]);
-        render_pass.draw_indexed(0..CROSSHAIR_INDICES.len() as u32, 0, 0..1);
+        self.hud_geometry_buffers.draw_indexed(&mut render_pass);
+        render_pass.draw_indexed(0..self.hud_geometry_buffers.index_count as u32, 0, 0..1);
 
-        render_pass.set_vertex_buffer(0, self.fps_vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.fps_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        // Render the FPS text
+        self.fps_geometry_buffers.set_buffers(&mut render_pass);
         render_pass.set_bind_group(0, &self.text_renderer.bind_group, &[]);
-        render_pass.draw_indexed(0..self.fps_index_count as u32, 0, 0..1);
+        self.fps_geometry_buffers.draw_indexed(&mut render_pass);
 
-        render_pass.set_vertex_buffer(0, self.coordinates_vertex_buffer.slice(..));
-        render_pass.set_index_buffer(
-            self.coordinates_index_buffer.slice(..),
-            wgpu::IndexFormat::Uint16,
+        // Render the coordinates text
+        self.coordinates_geometry_buffers
+            .set_buffers(&mut render_pass);
+        render_pass.set_bind_group(0, &self.text_renderer.bind_group, &[]);
+        self.coordinates_geometry_buffers
+            .draw_indexed(&mut render_pass);
+
+        Ok(HUD_INDICES.len() / 3)
+    }
+
+    pub fn redraw_hotbar_cursor(&self, render_context: &RenderContext) {
+        let x = (-92 + 20 * self.hotbar_cursor_position) as f32;
+
+        #[rustfmt::skip]
+        let vertices = [
+            HudVertex { position: [UI_SCALE_X * (x       ), -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [  0.0 / 256.0,  22.0 / 256.0] },
+            HudVertex { position: [UI_SCALE_X * (x + 24.0), -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [ 24.0 / 256.0,  22.0 / 256.0] },
+            HudVertex { position: [UI_SCALE_X * (x + 24.0), -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [ 24.0 / 256.0,  46.0 / 256.0] },
+            HudVertex { position: [UI_SCALE_X * (x       ), -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [  0.0 / 256.0,  46.0 / 256.0] },
+        ];
+
+        render_context.queue.write_buffer(
+            &self.hud_geometry_buffers.vertices,
+            HudVertex::descriptor().array_stride * 8,
+            bytemuck::cast_slice(&vertices),
         );
-        render_pass.set_bind_group(0, &self.text_renderer.bind_group, &[]);
-        render_pass.draw_indexed(0..self.coordinates_index_count as u32, 0, 0..1);
+    }
 
-        Ok(CROSSHAIR_INDICES.len() / 3)
+    pub fn set_hotbar_cursor(&mut self, render_context: &RenderContext, i: i32) {
+        self.hotbar_cursor_position = i;
+        self.redraw_hotbar_cursor(render_context);
+    }
+
+    pub fn move_hotbar_cursor(&mut self, render_context: &RenderContext, delta: i32) {
+        self.hotbar_cursor_position = (self.hotbar_cursor_position + delta).rem_euclid(9);
+        self.redraw_hotbar_cursor(render_context);
     }
 
     fn create_textures(render_context: &RenderContext) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
@@ -262,7 +265,7 @@ impl HudState {
                 vertex: wgpu::VertexState {
                     module,
                     entry_point: "main",
-                    buffers: &[Vertex::desc()],
+                    buffers: &[HudVertex::descriptor()],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module,
@@ -273,83 +276,45 @@ impl HudState {
                         write_mask: wgpu::ColorWrite::ALL,
                     }],
                 }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    clamp_depth: false,
-                    conservative: false,
-                },
+                primitive: PRIMITIVE_STATE,
                 depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
+                multisample: Default::default(),
             })
     }
 }
 
-pub const CROSSHAIR_VERTICES: &[Vertex] = &[
+#[rustfmt::skip]
+pub const HUD_VERTICES: [HudVertex; 12] = [
     // Crosshair
-    Vertex {
-        position: [-UI_SCALE_X * 8.0, UI_SCALE_Y * 8.0, 0.0],
-        texture_coordinates: [240.0 / 256.0, 0.0 / 256.0, 0.0],
-        normal: [0.0, 0.0, 0.0],
-        highlighted: 0,
-    },
-    Vertex {
-        position: [UI_SCALE_X * 8.0, UI_SCALE_Y * 8.0, 0.0],
-        texture_coordinates: [1.0, 0.0 / 256.0, 0.0],
-        normal: [0.0, 0.0, 0.0],
-        highlighted: 0,
-    },
-    Vertex {
-        position: [UI_SCALE_X * 8.0, -UI_SCALE_Y * 8.0, 0.0],
-        texture_coordinates: [1.0, 16.0 / 256.0, 0.0],
-        normal: [0.0, 0.0, 0.0],
-        highlighted: 0,
-    },
-    Vertex {
-        position: [-UI_SCALE_X * 8.0, -UI_SCALE_Y * 8.0, 0.0],
-        texture_coordinates: [240.0 / 256.0, 16.0 / 256.0, 0.0],
-        normal: [0.0, 0.0, 0.0],
-        highlighted: 0,
-    },
+    HudVertex { position: [UI_SCALE_X *  -8.0,        UI_SCALE_Y *  8.0], texture_coordinates: [240.0 / 256.0,   0.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X *   8.0,        UI_SCALE_Y *  8.0], texture_coordinates: [256.0 / 256.0,   0.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X *   8.0,        UI_SCALE_Y * -8.0], texture_coordinates: [256.0 / 256.0,  16.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X *  -8.0,        UI_SCALE_Y * -8.0], texture_coordinates: [240.0 / 256.0,  16.0 / 256.0] },
+
     // Hotbar
-    Vertex {
-        position: [-UI_SCALE_X * 91.0, -1.0 + UI_SCALE_Y * 22.0, 0.0],
-        texture_coordinates: [0.0 / 256.0, 0.0 / 256.0, 0.0],
-        normal: [0.0, 0.0, 0.0],
-        highlighted: 0,
-    },
-    Vertex {
-        position: [UI_SCALE_X * 91.0, -1.0 + UI_SCALE_Y * 22.0, 0.0],
-        texture_coordinates: [182.0 / 256.0, 0.0 / 256.0, 0.0],
-        normal: [0.0, 0.0, 0.0],
-        highlighted: 0,
-    },
-    Vertex {
-        position: [UI_SCALE_X * 91.0, -1.0, 0.0],
-        texture_coordinates: [182.0 / 256.0, 22.0 / 256.0, 0.0],
-        normal: [0.0, 0.0, 0.0],
-        highlighted: 0,
-    },
-    Vertex {
-        position: [-UI_SCALE_X * 91.0, -1.0, 0.0],
-        texture_coordinates: [0.0 / 256.0, 22.0 / 256.0, 0.0],
-        normal: [0.0, 0.0, 0.0],
-        highlighted: 0,
-    },
+    HudVertex { position: [UI_SCALE_X * -91.0, -1.0 + UI_SCALE_Y * 22.0], texture_coordinates: [  0.0 / 256.0,   0.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X *  91.0, -1.0 + UI_SCALE_Y * 22.0], texture_coordinates: [182.0 / 256.0,   0.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X *  91.0, -1.0                    ], texture_coordinates: [182.0 / 256.0,  22.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X * -91.0, -1.0                    ], texture_coordinates: [  0.0 / 256.0,  22.0 / 256.0] },
+
+    // Hotbar cursor
+    HudVertex { position: [UI_SCALE_X * -92.0, -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [  0.0 / 256.0,  22.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X * -68.0, -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [ 24.0 / 256.0,  22.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X * -68.0, -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [ 24.0 / 256.0,  46.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X * -92.0, -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [  0.0 / 256.0,  46.0 / 256.0] },
 ];
 
 #[rustfmt::skip]
-pub const CROSSHAIR_INDICES: &[u16] = &[
+pub const HUD_INDICES: [u16; 18] = [
+    // Crosshair
     1, 0, 3,
     1, 3, 2,
 
+    // Hotbar
     5, 4, 7,
     5, 7, 6,
+
+    // Hotbar cursor
+    9, 8, 11,
+    9, 11, 10,
 ];

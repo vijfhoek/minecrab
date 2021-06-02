@@ -1,8 +1,11 @@
 use std::convert::TryInto;
 
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-
-use crate::{render_context::RenderContext, texture::Texture, vertex::Vertex};
+use crate::{
+    geometry::{Geometry, GeometryBuffers},
+    render_context::RenderContext,
+    texture::Texture,
+    vertex::HudVertex,
+};
 
 pub const DX: f32 = 20.0 / 640.0;
 pub const DY: f32 = 20.0 / 360.0;
@@ -100,16 +103,16 @@ impl TextRenderer {
         y: f32,
         c: u8,
         index_offset: u16,
-    ) -> ([Vertex; 4], [u16; 6]) {
+    ) -> ([HudVertex; 4], [u16; 6]) {
         let (tx, ty) = Self::char_uv(c);
         let s = 1.0 / 16.0;
 
         #[rustfmt::skip]
         let vertices = [
-            Vertex { position: [x,      y,      0.0], texture_coordinates: [tx,     ty,     0.0], ..Default::default() },
-            Vertex { position: [x + DX, y,      0.0], texture_coordinates: [tx + s, ty,     0.0], ..Default::default() },
-            Vertex { position: [x + DX, y - DY, 0.0], texture_coordinates: [tx + s, ty + s, 0.0], ..Default::default() },
-            Vertex { position: [x,      y - DY, 0.0], texture_coordinates: [tx,     ty + s, 0.0], ..Default::default() },
+            HudVertex { position: [x,      y     ], texture_coordinates: [tx,     ty    ] },
+            HudVertex { position: [x + DX, y     ], texture_coordinates: [tx + s, ty    ] },
+            HudVertex { position: [x + DX, y - DY], texture_coordinates: [tx + s, ty + s] },
+            HudVertex { position: [x,      y - DY], texture_coordinates: [tx,     ty + s] },
         ];
 
         #[rustfmt::skip]
@@ -121,7 +124,7 @@ impl TextRenderer {
         (vertices, indices)
     }
 
-    pub fn string_geometry(&self, mut x: f32, mut y: f32, string: &str) -> (Vec<Vertex>, Vec<u16>) {
+    pub fn string_geometry(&self, mut x: f32, mut y: f32, string: &str) -> Geometry<HudVertex> {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
 
@@ -141,7 +144,7 @@ impl TextRenderer {
             }
         }
 
-        (vertices, indices)
+        Geometry::new(vertices, indices)
     }
 
     pub fn string_to_buffers(
@@ -150,25 +153,8 @@ impl TextRenderer {
         x: f32,
         y: f32,
         string: &str,
-    ) -> (wgpu::Buffer, wgpu::Buffer, usize) {
-        let (vertices, indices) = self.string_geometry(x, y, string);
-
-        let vertex_buffer = render_context
-            .device
-            .create_buffer_init(&BufferInitDescriptor {
-                label: Some("font renderer"),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsage::VERTEX,
-            });
-
-        let index_buffer = render_context
-            .device
-            .create_buffer_init(&BufferInitDescriptor {
-                label: Some("font renderer"),
-                contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsage::INDEX,
-            });
-
-        (vertex_buffer, index_buffer, indices.len())
+    ) -> GeometryBuffers {
+        let geometry = self.string_geometry(x, y, string);
+        GeometryBuffers::from_geometry(render_context, &geometry, wgpu::BufferUsage::empty())
     }
 }

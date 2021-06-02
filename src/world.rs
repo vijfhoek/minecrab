@@ -1,14 +1,15 @@
 use crate::{
     chunk::{Block, Chunk, CHUNK_SIZE},
-    vertex::Vertex,
+    geometry::Geometry,
     npc::Npc,
+    vertex::BlockVertex,
 };
 use cgmath::{InnerSpace, Vector3};
 use rayon::prelude::*;
 
 pub struct World {
     pub chunks: Vec<Vec<Vec<Chunk>>>,
-    pub npc: Npc
+    pub npc: Npc,
 }
 
 const WORLD_SIZE: Vector3<usize> = Vector3::new(
@@ -67,7 +68,7 @@ impl World {
     pub fn to_geometry(
         &self,
         highlighted: Option<(Vector3<usize>, Vector3<i32>)>,
-    ) -> Vec<(Vector3<usize>, Vec<Vertex>, Vec<u16>)> {
+    ) -> Vec<(Vector3<usize>, Geometry<BlockVertex>)> {
         let instant = std::time::Instant::now();
 
         let chunks = &self.chunks;
@@ -75,17 +76,17 @@ impl World {
             .par_iter()
             .enumerate()
             .flat_map(|(y, chunks_y)| {
-                let mut geometry = Vec::new();
+                let mut chunk_geometry = Vec::new();
                 for (z, chunks_z) in chunks_y.iter().enumerate() {
                     for (x, chunk) in chunks_z.iter().enumerate() {
                         let chunk_position = Vector3::new(x as usize, y as usize, z as usize);
                         let offset = (chunk_position * CHUNK_SIZE).cast().unwrap();
                         let h = Self::highlighted_for_chunk(highlighted, chunk_position);
-                        let (vertices, indices) = chunk.to_geometry(offset, h.as_ref());
-                        geometry.push((Vector3::new(x, y, z), vertices, indices));
+                        let geometry = chunk.to_geometry(offset, h.as_ref());
+                        chunk_geometry.push((Vector3::new(x, y, z), geometry));
                     }
                 }
-                geometry
+                chunk_geometry
             })
             .collect();
 
@@ -182,15 +183,15 @@ impl World {
             if lengths.x < lengths.y && lengths.x < lengths.z {
                 lengths.x += scale.x;
                 position.x += step.x;
-                face = Vector3::unit_x() * step.x;
+                face = Vector3::unit_x() * -step.x;
             } else if lengths.y < lengths.x && lengths.y < lengths.z {
                 lengths.y += scale.y;
                 position.y += step.y;
-                face = Vector3::unit_y() * step.y;
+                face = Vector3::unit_y() * -step.y;
             } else if lengths.z < lengths.x && lengths.z < lengths.y {
                 lengths.z += scale.z;
                 position.z += step.z;
-                face = Vector3::unit_z() * step.z;
+                face = Vector3::unit_z() * -step.z;
             } else {
                 return None;
             }

@@ -1,9 +1,10 @@
-use std::{collections::VecDeque, convert::TryInto, usize};
+use std::{collections::VecDeque, usize};
 
-use crate::{cube, quad::Quad, vertex::Vertex};
+use crate::{geometry::Geometry, quad::Quad, vertex::BlockVertex};
 use ahash::{AHashMap, AHashSet};
-use cgmath::{Vector3, Zero};
+use cgmath::Vector3;
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -46,6 +47,8 @@ pub const FACE_BOTTOM: FaceFlags = 4;
 pub const FACE_TOP: FaceFlags = 8;
 pub const FACE_BACK: FaceFlags = 16;
 pub const FACE_FRONT: FaceFlags = 32;
+pub const FACE_ALL: FaceFlags =
+    FACE_LEFT | FACE_RIGHT | FACE_BOTTOM | FACE_TOP | FACE_BACK | FACE_FRONT;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Block {
@@ -218,12 +221,13 @@ impl Chunk {
         culled: AHashMap<(usize, usize), (BlockType, FaceFlags)>,
         queue: &mut VecDeque<(usize, usize)>,
         highlighted: Option<&(Vector3<usize>, Vector3<i32>)>,
-    ) -> Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)> {
-        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)> =
-            Vec::new();
+    ) -> Vec<Quad> {
+        let mut quads: Vec<Quad> = Vec::new();
         let mut visited = AHashSet::new();
         let hl = highlighted.map(|h| h.0);
         while let Some((x, z)) = queue.pop_front() {
+            let position = offset + Vector3::new(x, y, z).cast().unwrap();
+
             if visited.contains(&(x, z)) {
                 continue;
             }
@@ -233,28 +237,19 @@ impl Chunk {
                 let mut quad_faces = visible_faces;
 
                 if hl == Some(Vector3::new(x, y, z)) {
-                    let quad = Quad::new(x as i32, z as i32, 1, 1);
-                    quads.push((
-                        block_type,
-                        y as i32,
-                        offset,
-                        quad,
-                        highlighted.unwrap().1,
-                        quad_faces,
-                    ));
+                    let mut quad = Quad::new(position, 1, 1);
+                    quad.highlighted_normal = highlighted.unwrap().1;
+                    quad.visible_faces = quad_faces;
+                    quad.block_type = Some(block_type);
+                    quads.push(quad);
                     continue;
                 }
 
                 if block_type == BlockType::Water {
-                    let quad = Quad::new(x as i32, z as i32, 1, 1);
-                    quads.push((
-                        block_type,
-                        y as i32,
-                        offset,
-                        quad,
-                        Vector3::zero(),
-                        quad_faces,
-                    ));
+                    let mut quad = Quad::new(position, 1, 1);
+                    quad.visible_faces = quad_faces;
+                    quad.block_type = Some(block_type);
+                    quads.push(quad);
                     continue;
                 }
 
@@ -304,60 +299,36 @@ impl Chunk {
                     }
                 }
 
-                let quad = Quad::new(x as i32, z as i32, (xmax - x) as i32, (zmax - z) as i32);
-                quads.push((
-                    block_type,
-                    y as i32,
-                    offset,
-                    quad,
-                    Vector3::zero(),
-                    quad_faces,
-                ));
+                let mut quad = Quad::new(position, (xmax - x) as i32, (zmax - z) as i32);
+                quad.visible_faces = quad_faces;
+                quad.block_type = Some(block_type);
+                quads.push(quad);
             }
         }
 
         quads
     }
 
-    fn quads_to_geometry(
-        quads: Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)>,
-    ) -> (Vec<Vertex>, Vec<u16>) {
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
-        for (block_type, y, offset, quad, highlighted, visible_faces) in quads {
-            let texture_indices = block_type.texture_indices();
-
-            let (quad_vertices, quad_indices) = &cube::vertices(
-                &quad,
-                y,
-                1.0,
-                offset,
-                texture_indices,
-                highlighted,
-                visible_faces,
-                vertices.len().try_into().unwrap(),
-            );
-
-            vertices.extend(quad_vertices);
-            indices.extend(quad_indices);
+    fn quads_to_geometry(quads: Vec<Quad>) -> Geometry<BlockVertex> {
+        let mut geometry: Geometry<BlockVertex> = Default::default();
+        for quad in quads {
+            geometry.append(&mut quad.to_geometry(geometry.vertices.len() as u16));
         }
-
-        (vertices, indices)
+        geometry
     }
 
     pub fn to_geometry(
         &self,
         offset: Vector3<i32>,
         highlighted: Option<&(Vector3<usize>, Vector3<i32>)>,
-    ) -> (Vec<Vertex>, Vec<u16>) {
-        let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)> =
-            Vec::new();
-
-        for y in 0..CHUNK_SIZE {
-            let (culled, mut queue) = self.cull_layer(y);
-            let mut layer_quads = self.layer_to_quads(y, offset, culled, &mut queue, highlighted);
-            quads.append(&mut layer_quads);
-        }
+    ) -> Geometry<BlockVertex> {
+        let quads: Vec<Quad> = (0..CHUNK_SIZE)
+            .into_par_iter()
+            .flat_map(|y| {
+                let (culled, mut queue) = self.cull_layer(y);
+                self.layer_to_quads(y, offset, culled, &mut queue, highlighted)
+            })
+            .collect();
 
         Self::quads_to_geometry(quads)
     }

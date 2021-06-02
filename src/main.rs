@@ -1,15 +1,15 @@
 mod aabb;
 mod camera;
 mod chunk;
-mod cube;
+mod geometry;
 mod quad;
 mod render_context;
 mod state;
 mod text_renderer;
 mod texture;
 mod time;
-mod uniforms;
 mod vertex;
+mod view;
 mod world;
 mod npc;
 
@@ -106,7 +106,7 @@ fn main() {
                     let fps_min = 1_000_000 / frametime_max.as_micros();
 
                     println!(
-                        "{:>4} frames | frametime avg={:>5.2}ms min={:>5.2}ms max={:>5.2}ms | fps avg={:>4} min={:>4} max={:>4} | {:>8} tris",
+                        "{:>4} frames | frametime avg={:>5.2}ms min={:>5.2}ms max={:>5.2}ms | fps avg={:>5} min={:>5} max={:>5} | {:>8} tris",
                         frames, frametime.as_secs_f32() * 1000.0, frametime_min.as_secs_f32() * 1000.0, frametime_max.as_secs_f32() * 1000.0, fps, fps_min, fps_max, triangle_count,
                     );
 

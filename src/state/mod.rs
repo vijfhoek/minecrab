@@ -6,7 +6,7 @@ use std::time::Duration;
 use cgmath::EuclideanSpace;
 use winit::{
     dpi::PhysicalSize,
-    event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{DeviceEvent, ElementState, MouseScrollDelta, VirtualKeyCode, WindowEvent},
     window::Window,
 };
 
@@ -14,6 +14,16 @@ use hud_state::HudState;
 use world_state::WorldState;
 
 use crate::render_context::RenderContext;
+
+pub const PRIMITIVE_STATE: wgpu::PrimitiveState = wgpu::PrimitiveState {
+    topology: wgpu::PrimitiveTopology::TriangleList,
+    strip_index_format: None,
+    front_face: wgpu::FrontFace::Ccw,
+    cull_mode: None,
+    polygon_mode: wgpu::PolygonMode::Fill,
+    clamp_depth: false,
+    conservative: false,
+};
 
 pub struct State {
     pub window_size: PhysicalSize<u32>,
@@ -122,12 +132,23 @@ impl State {
         );
     }
 
-    fn input_keyboard(&mut self, key_code: &VirtualKeyCode, state: &ElementState) {
-        match key_code {
-            VirtualKeyCode::F1 if state == &ElementState::Pressed => {
-                self.world_state.toggle_wireframe(&self.render_context)
+    fn input_keyboard(&mut self, key_code: VirtualKeyCode, state: ElementState) {
+        if state == ElementState::Pressed {
+            match key_code {
+                VirtualKeyCode::F1 => self.world_state.toggle_wireframe(&self.render_context),
+                VirtualKeyCode::Key1 => self.hud_state.set_hotbar_cursor(&self.render_context, 0),
+                VirtualKeyCode::Key2 => self.hud_state.set_hotbar_cursor(&self.render_context, 1),
+                VirtualKeyCode::Key3 => self.hud_state.set_hotbar_cursor(&self.render_context, 2),
+                VirtualKeyCode::Key4 => self.hud_state.set_hotbar_cursor(&self.render_context, 3),
+                VirtualKeyCode::Key5 => self.hud_state.set_hotbar_cursor(&self.render_context, 4),
+                VirtualKeyCode::Key6 => self.hud_state.set_hotbar_cursor(&self.render_context, 5),
+                VirtualKeyCode::Key7 => self.hud_state.set_hotbar_cursor(&self.render_context, 6),
+                VirtualKeyCode::Key8 => self.hud_state.set_hotbar_cursor(&self.render_context, 7),
+                VirtualKeyCode::Key9 => self.hud_state.set_hotbar_cursor(&self.render_context, 8),
+                _ => self.world_state.input_keyboard(key_code, state),
             }
-            _ => self.world_state.input_keyboard(key_code, state),
+        } else {
+            self.world_state.input_keyboard(key_code, state)
         }
     }
 
@@ -139,15 +160,9 @@ impl State {
 
     pub fn window_event(&mut self, event: &WindowEvent) {
         match event {
-            WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        virtual_keycode: Some(key),
-                        state,
-                        ..
-                    },
-                ..
-            } => self.input_keyboard(key, state),
+            WindowEvent::KeyboardInput { input, .. } if input.virtual_keycode.is_some() => {
+                self.input_keyboard(input.virtual_keycode.unwrap(), input.state)
+            }
 
             WindowEvent::MouseInput {
                 button,
@@ -157,14 +172,20 @@ impl State {
                 .world_state
                 .input_mouse_button(button, &self.render_context),
 
+            WindowEvent::MouseWheel {
+                delta: MouseScrollDelta::LineDelta(_, delta),
+                ..
+            } => self
+                .hud_state
+                .move_hotbar_cursor(&self.render_context, -*delta as i32),
+
             _ => (),
         }
     }
 
     pub fn device_event(&mut self, event: &DeviceEvent) {
-        match event {
-            DeviceEvent::MouseMotion { delta: (dx, dy) } => self.input_mouse(*dx, *dy),
-            _ => (),
+        if let DeviceEvent::MouseMotion { delta } = event {
+            self.input_mouse(delta.0, delta.1)
         }
     }
 

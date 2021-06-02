@@ -4,12 +4,12 @@ use crate::camera::{Camera, Projection};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Uniforms {
+pub struct View {
     view_position: [f32; 4],
     view_projection: [[f32; 4]; 4],
 }
 
-impl Uniforms {
+impl View {
     pub fn new() -> Self {
         Self {
             view_position: [0.0; 4],

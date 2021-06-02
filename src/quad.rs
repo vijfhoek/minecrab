@@ -11,22 +11,21 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Quad {
-    pub x: i32,
-    pub y: i32,
+    pub position: Vector3<i32>,
     pub dx: i32,
-    pub dy: i32,
+    pub dz: i32,
 
     pub highlighted_normal: Vector3<i32>,
     pub visible_faces: FaceFlags,
+    pub block_type: Option<BlockType>,
 }
 
 impl Quad {
-    pub fn new(x: i32, y: i32, dx: i32, dy: i32) -> Self {
+    pub fn new(position: Vector3<i32>, dx: i32, dz: i32) -> Self {
         Quad {
-            x,
-            y,
+            position,
             dx,
-            dy,
+            dz,
 
             /// The normal of the face that was highlighted.
             ///
@@ -35,6 +34,11 @@ impl Quad {
 
             /// Bitmap of the visible faces.
             visible_faces: FACE_ALL,
+
+            /// The `BlockType` of the blocks the quad describes.
+            ///
+            /// Used for determining which texture to map to it. When `None`, texture index 0 will be used.
+            block_type: None,
         }
     }
 
@@ -42,26 +46,25 @@ impl Quad {
     ///
     /// # Arguments
     ///
-    /// * `translation` - How much to translate the quad for when rendering.
-    /// * `block_type` - The type of the block. Used for determining the texture indices.
     /// * `start_index` - Which geometry index to start at.
     #[allow(clippy::many_single_char_names)]
     #[rustfmt::skip]
     pub fn to_geometry(
         &self,
-        translation: Vector3<i32>,
-        block_type: BlockType,
         start_index: u16,
     ) -> Geometry<BlockVertex> {
         let dx = self.dx as f32;
-        let dz = self.dy as f32;
+        let dz = self.dz as f32;
         let dy = 1.0;
 
-        let x = (self.x + translation.x) as f32;
-        let y = translation.y as f32;
-        let z = (self.y + translation.z) as f32;
+        let x = self.position.x as f32;
+        let y = self.position.y as f32;
+        let z = self.position.z as f32;
 
-        let t = block_type.texture_indices();
+        let t =  match self.block_type {
+            Some(block_type) => block_type.texture_indices(),
+            None => (0, 0, 0, 0, 0, 0),
+        };
 
         let mut current_index = start_index;
         let mut vertices = Vec::new();

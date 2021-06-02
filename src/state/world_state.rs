@@ -13,7 +13,7 @@ use winit::{
 
 use crate::{
     camera::{Camera, Projection},
-    chunk::{Block, BlockType, CHUNK_SIZE},
+    chunk::{Block, BlockType, CHUNK_ISIZE},
     geometry::GeometryBuffers,
     render_context::RenderContext,
     texture::{Texture, TextureManager},
@@ -35,13 +35,13 @@ pub struct WorldState {
     pub time_bind_group: wgpu::BindGroup,
     pub world: World,
 
-    pub chunk_buffers: AHashMap<Vector3<usize>, GeometryBuffers>,
+    pub chunk_buffers: AHashMap<Point3<isize>, GeometryBuffers>,
     time: Time,
     time_buffer: wgpu::Buffer,
     wireframe: bool,
     shader: wgpu::ShaderModule,
     render_pipeline_layout: wgpu::PipelineLayout,
-    pub highlighted: Option<(Vector3<usize>, Vector3<i32>)>,
+    pub highlighted: Option<(Point3<isize>, Vector3<i32>)>,
 
     pub forward_pressed: bool,
     pub backward_pressed: bool,
@@ -256,13 +256,13 @@ impl WorldState {
     pub fn update_chunk_geometry(
         &mut self,
         render_context: &RenderContext,
-        chunk_position: Vector3<usize>,
+        chunk_position: Point3<isize>,
     ) {
-        let chunk = &mut self.world.chunks[chunk_position.y][chunk_position.z][chunk_position.x];
-        let offset = chunk_position.map(|f| (f * CHUNK_SIZE) as i32);
+        let chunk = &mut self.world.chunks.get(&chunk_position).unwrap();
+        let offset = chunk_position * CHUNK_ISIZE;
         let geometry = chunk.to_geometry(
             offset,
-            World::highlighted_for_chunk(self.highlighted, chunk_position).as_ref(),
+            World::highlighted_for_chunk(self.highlighted, &chunk_position).as_ref(),
         );
 
         let buffers =
@@ -393,7 +393,7 @@ impl WorldState {
         let camera_pos = Vector2::new(camera_pos.x, camera_pos.z);
 
         for (position, buffers) in &self.chunk_buffers {
-            let pos = (position * CHUNK_SIZE).cast().unwrap();
+            let pos = (position * CHUNK_ISIZE).cast().unwrap();
             let pos = Vector2::new(pos.x, pos.z);
             if (pos - camera_pos).magnitude() > 300.0 {
                 continue;
@@ -433,12 +433,10 @@ impl WorldState {
         let camera = &self.camera;
 
         let old = self.highlighted;
-        let new = self
-            .world
-            .raycast(camera.position.to_vec(), camera.direction());
+        let new = self.world.raycast(camera.position, camera.direction());
 
-        let old_chunk = old.map(|h| h.0 / CHUNK_SIZE);
-        let new_chunk = new.map(|h| h.0 / CHUNK_SIZE);
+        let old_chunk = old.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
+        let new_chunk = new.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
 
         if old != new {
             self.highlighted = new;
@@ -460,12 +458,10 @@ impl WorldState {
         let camera = &self.camera;
 
         let world = &mut self.world;
-        if let Some((pos, face_normal)) =
-            world.raycast(camera.position.to_vec(), camera.direction())
-        {
+        if let Some((pos, face_normal)) = world.raycast(camera.position, camera.direction()) {
             if button == &MouseButton::Left {
                 world.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
-                self.update_chunk_geometry(render_context, pos / CHUNK_SIZE);
+                self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
             } else if button == &MouseButton::Right {
                 let new_pos = pos.cast().unwrap() + face_normal;
 
@@ -478,7 +474,7 @@ impl WorldState {
                     }),
                 );
 
-                self.update_chunk_geometry(render_context, pos / CHUNK_SIZE);
+                self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
             }
         }
     }

@@ -2,7 +2,7 @@ use std::{collections::VecDeque, usize};
 
 use crate::{geometry::Geometry, quad::Quad, vertex::BlockVertex};
 use ahash::{AHashMap, AHashSet};
-use cgmath::Vector3;
+use cgmath::{Point3, Vector3};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -55,7 +55,8 @@ pub struct Block {
     pub block_type: BlockType,
 }
 
-pub const CHUNK_SIZE: usize = 64;
+pub const CHUNK_SIZE: usize = 32;
+pub const CHUNK_ISIZE: isize = CHUNK_SIZE as isize;
 
 type ChunkBlocks = [[[Option<Block>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
 
@@ -217,10 +218,10 @@ impl Chunk {
     fn layer_to_quads(
         &self,
         y: usize,
-        offset: Vector3<i32>,
+        offset: Point3<isize>,
         culled: AHashMap<(usize, usize), (BlockType, FaceFlags)>,
         queue: &mut VecDeque<(usize, usize)>,
-        highlighted: Option<&(Vector3<usize>, Vector3<i32>)>,
+        highlighted: Option<&(Point3<usize>, Vector3<i32>)>,
     ) -> Vec<Quad> {
         let mut quads: Vec<Quad> = Vec::new();
         let mut visited = AHashSet::new();
@@ -236,7 +237,7 @@ impl Chunk {
             if let Some(&(block_type, visible_faces)) = &culled.get(&(x, z)) {
                 let mut quad_faces = visible_faces;
 
-                if hl == Some(Vector3::new(x, y, z)) {
+                if hl == Some(Point3::new(x, y, z)) {
                     let mut quad = Quad::new(position, 1, 1);
                     quad.highlighted_normal = highlighted.unwrap().1;
                     quad.visible_faces = quad_faces;
@@ -258,7 +259,7 @@ impl Chunk {
                 for x_ in x..CHUNK_SIZE {
                     xmax = x_ + 1;
 
-                    if visited.contains(&(xmax, z)) || hl == Some(Vector3::new(xmax, y, z)) {
+                    if visited.contains(&(xmax, z)) || hl == Some(Point3::new(xmax, y, z)) {
                         break;
                     }
 
@@ -280,7 +281,7 @@ impl Chunk {
                     zmax = z_ + 1;
 
                     for x_ in x..xmax {
-                        if visited.contains(&(x_, zmax)) || hl == Some(Vector3::new(x_, y, zmax)) {
+                        if visited.contains(&(x_, zmax)) || hl == Some(Point3::new(x_, y, zmax)) {
                             break 'z;
                         }
 
@@ -299,7 +300,7 @@ impl Chunk {
                     }
                 }
 
-                let mut quad = Quad::new(position, (xmax - x) as i32, (zmax - z) as i32);
+                let mut quad = Quad::new(position, (xmax - x) as isize, (zmax - z) as isize);
                 quad.visible_faces = quad_faces;
                 quad.block_type = Some(block_type);
                 quads.push(quad);
@@ -319,14 +320,14 @@ impl Chunk {
 
     pub fn to_geometry(
         &self,
-        offset: Vector3<i32>,
-        highlighted: Option<&(Vector3<usize>, Vector3<i32>)>,
+        position: Point3<isize>,
+        highlighted: Option<&(Point3<usize>, Vector3<i32>)>,
     ) -> Geometry<BlockVertex> {
         let quads: Vec<Quad> = (0..CHUNK_SIZE)
             .into_par_iter()
             .flat_map(|y| {
                 let (culled, mut queue) = self.cull_layer(y);
-                self.layer_to_quads(y, offset, culled, &mut queue, highlighted)
+                self.layer_to_quads(y, position, culled, &mut queue, highlighted)
             })
             .collect();
 

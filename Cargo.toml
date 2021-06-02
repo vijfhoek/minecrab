@@ -19,6 +19,7 @@ noise = "0.7.0"
 rayon = "1.5.1"
 wgpu = "0.8.1"
 winit = { version = "0.25.0", default_features = false, features = ["x11", "web-sys"] }
+itertools = "0.10.0"
 
 [profile.release]
 debug = true

@@ -1,4 +1,4 @@
-use cgmath::{Vector3, Zero};
+use cgmath::{Point3, Vector3, Zero};
 
 use crate::{
     chunk::{
@@ -11,9 +11,9 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Quad {
-    pub position: Vector3<i32>,
-    pub dx: i32,
-    pub dz: i32,
+    pub position: Point3<isize>,
+    pub dx: isize,
+    pub dz: isize,
 
     pub highlighted_normal: Vector3<i32>,
     pub visible_faces: FaceFlags,
@@ -21,7 +21,7 @@ pub struct Quad {
 }
 
 impl Quad {
-    pub fn new(position: Vector3<i32>, dx: i32, dz: i32) -> Self {
+    pub fn new(position: Point3<isize>, dx: isize, dz: isize) -> Self {
         Quad {
             position,
             dx,

@@ -1,0 +1,9 @@
+kind: pipeline
+type: docker
+name: frontend
+
+steps:
+  - name: dependencies
+    image: rust:slim
+    commands:
+      - cargo doc

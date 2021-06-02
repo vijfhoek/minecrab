@@ -50,6 +50,7 @@ pub struct WorldState {
 
     pub up_speed: f32,
     pub sprinting: bool,
+    pub creative: bool,
 }
 
 impl WorldState {
@@ -234,6 +235,24 @@ impl WorldState {
         println!("World update took {:?}", elapsed);
     }
 
+    pub fn load_npc_geometry(&mut self, render_context: &RenderContext) {
+        self.world.npc.vertex_buffer = Some(render_context.device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: None,
+                contents: &bytemuck::cast_slice(&self.world.npc.vertices),
+                usage: wgpu::BufferUsage::VERTEX,
+            },
+        ));
+
+        self.world.npc.index_buffer = Some(render_context.device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: None,
+                contents: &bytemuck::cast_slice(&self.world.npc.indices),
+                usage: wgpu::BufferUsage::INDEX,
+            },
+        ));
+    }
+
     pub fn update_chunk_geometry(
         &mut self,
         render_context: &RenderContext,
@@ -326,9 +345,11 @@ impl WorldState {
             backward_pressed: false,
             left_pressed: false,
             right_pressed: false,
+            creative: false,
         };
 
         world_state.update_world_geometry(render_context);
+        world_state.load_npc_geometry(render_context);
 
         world_state
     }
@@ -381,6 +402,16 @@ impl WorldState {
             buffers.set_buffers(&mut render_pass);
             buffers.draw_indexed(&mut render_pass);
             triangle_count += buffers.index_count / 3;
+        }
+
+        {
+            let vertex_buffer = self.world.npc.vertex_buffer.as_ref();
+            let index_buffer = self.world.npc.index_buffer.as_ref();
+
+            render_pass.set_vertex_buffer(0, vertex_buffer.unwrap().slice(..));
+            render_pass
+                .set_index_buffer(index_buffer.unwrap().slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..self.world.npc.indices.len() as u32, 0, 0..1);
         }
 
         triangle_count
@@ -459,7 +490,21 @@ impl WorldState {
             VirtualKeyCode::S => self.backward_pressed = pressed,
             VirtualKeyCode::A => self.left_pressed = pressed,
             VirtualKeyCode::D => self.right_pressed = pressed,
-            VirtualKeyCode::Space if state == ElementState::Pressed => self.up_speed = 0.6,
+            VirtualKeyCode::F2 if pressed => self.creative = !self.creative,
+            VirtualKeyCode::Space => {
+                self.up_speed = if self.creative {
+                    if pressed {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                } else {
+                    0.6
+                }
+            }
+            VirtualKeyCode::LShift if self.creative => {
+                self.up_speed = if pressed { -1.0 } else { 0.0 }
+            }
             VirtualKeyCode::LControl => self.sprinting = state == ElementState::Pressed,
             _ => (),
         }
@@ -485,7 +530,7 @@ impl WorldState {
 
         let up = Vector3::unit_y() * self.up_speed * speed * dt_seconds;
         new_position += up;
-        if self.check_collision(new_position) {
+        if !self.creative && self.check_collision(new_position) {
             new_position -= up;
             self.up_speed = 0.0;
         }
@@ -494,7 +539,7 @@ impl WorldState {
         let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
         let forward = forward * forward_speed as f32 * speed * dt_seconds;
         new_position += forward;
-        if self.check_collision(new_position) {
+        if !self.creative && self.check_collision(new_position) {
             new_position -= forward;
         }
 
@@ -502,14 +547,16 @@ impl WorldState {
         let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
         let right = right * right_speed as f32 * speed * dt_seconds;
         new_position += right;
-        if self.check_collision(new_position) {
+        if !self.creative && self.check_collision(new_position) {
             new_position -= right;
         }
 
         self.camera.position = new_position;
 
-        self.up_speed -= 1.6 * dt.as_secs_f32();
-        self.up_speed *= 0.98_f32.powf(dt.as_secs_f32() / 20.0);
+        if !self.creative {
+            self.up_speed -= 1.6 * dt.as_secs_f32();
+            self.up_speed *= 0.98_f32.powf(dt.as_secs_f32() / 20.0);
+        }
     }
 
     pub fn update(&mut self, dt: Duration, render_context: &RenderContext) {

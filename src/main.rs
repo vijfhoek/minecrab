@@ -80,13 +80,18 @@ fn main() {
                     button,
                     ..
                 } => {
-                    if *button == MouseButton::Left && *mouse_state == ElementState::Pressed {
+                    if !state.mouse_grabbed && *button == MouseButton::Left && *mouse_state == ElementState::Pressed {
                         let _ = window.set_cursor_grab(true);
                         window.set_cursor_visible(false);
                         state.mouse_grabbed = true;
+                    } else {
+                        state.window_event(event);
                     }
-
-                    state.window_event(event);
+                }
+                WindowEvent::Focused(false) => {
+                    let _ = window.set_cursor_grab(false);
+                    window.set_cursor_visible(true);
+                    state.mouse_grabbed = false;
                 }
                 event => { state.window_event(event); }
             },

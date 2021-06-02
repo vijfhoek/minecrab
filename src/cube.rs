@@ -1,3 +1,4 @@
+use crate::geometry::Geometry;
 use cgmath::Vector3;
 
 use crate::{
@@ -17,7 +18,7 @@ pub fn vertices(
     highlighted: Vector3<i32>,
     visible_faces: FaceFlags,
     start_index: u16,
-) -> (Vec<BlockVertex>, Vec<u16>) {
+) -> Geometry<BlockVertex> {
     let w = quad.w as f32;
     let h = quad.h as f32;
     let zh = z_height;
@@ -128,5 +129,5 @@ pub fn vertices(
         ]);
     }
 
-    (vertices, indices)
+    Geometry::new(vertices, indices)
 }

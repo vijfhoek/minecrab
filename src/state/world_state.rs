@@ -17,7 +17,7 @@ use crate::{
     render_context::RenderContext,
     texture::{Texture, TextureManager},
     time::Time,
-    vertex::BlockVertex,
+    vertex::{BlockVertex, Vertex},
     view::View,
     world::World,
 };
@@ -220,7 +220,7 @@ impl WorldState {
 
         let world_geometry = self.world.to_geometry(self.highlighted);
         self.chunk_buffers.clear();
-        for (chunk_position, chunk_vertices, chunk_indices) in world_geometry {
+        for (chunk_position, chunk_geometry) in world_geometry {
             self.chunk_buffers.insert(
                 chunk_position,
                 (
@@ -228,17 +228,17 @@ impl WorldState {
                         .device
                         .create_buffer_init(&BufferInitDescriptor {
                             label: None,
-                            contents: &bytemuck::cast_slice(&chunk_vertices),
+                            contents: &bytemuck::cast_slice(&chunk_geometry.vertices),
                             usage: wgpu::BufferUsage::VERTEX,
                         }),
                     render_context
                         .device
                         .create_buffer_init(&BufferInitDescriptor {
                             label: None,
-                            contents: &bytemuck::cast_slice(&chunk_indices),
+                            contents: &bytemuck::cast_slice(&chunk_geometry.indices),
                             usage: wgpu::BufferUsage::INDEX,
                         }),
-                    chunk_indices.len(),
+                    chunk_geometry.index_count(),
                 ),
             );
         }
@@ -254,7 +254,7 @@ impl WorldState {
     ) {
         let chunk = &mut self.world.chunks[chunk_position.y][chunk_position.z][chunk_position.x];
         let offset = chunk_position.map(|f| (f * CHUNK_SIZE) as i32);
-        let (vertices, indices) = chunk.to_geometry(
+        let geometry = chunk.to_geometry(
             offset,
             World::highlighted_for_chunk(self.highlighted, chunk_position).as_ref(),
         );
@@ -266,17 +266,17 @@ impl WorldState {
                     .device
                     .create_buffer_init(&BufferInitDescriptor {
                         label: None,
-                        contents: &bytemuck::cast_slice(&vertices),
+                        contents: &bytemuck::cast_slice(&geometry.vertices),
                         usage: wgpu::BufferUsage::VERTEX,
                     }),
                 render_context
                     .device
                     .create_buffer_init(&BufferInitDescriptor {
                         label: None,
-                        contents: &bytemuck::cast_slice(&indices),
+                        contents: &bytemuck::cast_slice(&geometry.indices),
                         usage: wgpu::BufferUsage::INDEX,
                     }),
-                indices.len(),
+                geometry.index_count(),
             ),
         );
     }

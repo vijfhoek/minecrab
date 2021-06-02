@@ -2,7 +2,9 @@ use std::convert::TryInto;
 
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
-use crate::{render_context::RenderContext, texture::Texture, vertex::HudVertex};
+use crate::{
+    geometry::Geometry, render_context::RenderContext, texture::Texture, vertex::HudVertex,
+};
 
 pub const DX: f32 = 20.0 / 640.0;
 pub const DY: f32 = 20.0 / 360.0;
@@ -121,12 +123,7 @@ impl TextRenderer {
         (vertices, indices)
     }
 
-    pub fn string_geometry(
-        &self,
-        mut x: f32,
-        mut y: f32,
-        string: &str,
-    ) -> (Vec<HudVertex>, Vec<u16>) {
+    pub fn string_geometry(&self, mut x: f32, mut y: f32, string: &str) -> Geometry<HudVertex> {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
 
@@ -146,7 +143,7 @@ impl TextRenderer {
             }
         }
 
-        (vertices, indices)
+        Geometry::new(vertices, indices)
     }
 
     pub fn string_to_buffers(
@@ -156,13 +153,13 @@ impl TextRenderer {
         y: f32,
         string: &str,
     ) -> (wgpu::Buffer, wgpu::Buffer, usize) {
-        let (vertices, indices) = self.string_geometry(x, y, string);
+        let geometry = self.string_geometry(x, y, string);
 
         let vertex_buffer = render_context
             .device
             .create_buffer_init(&BufferInitDescriptor {
                 label: Some("font renderer"),
-                contents: bytemuck::cast_slice(&vertices),
+                contents: bytemuck::cast_slice(&geometry.vertices),
                 usage: wgpu::BufferUsage::VERTEX,
             });
 
@@ -170,10 +167,10 @@ impl TextRenderer {
             .device
             .create_buffer_init(&BufferInitDescriptor {
                 label: Some("font renderer"),
-                contents: bytemuck::cast_slice(&indices),
+                contents: bytemuck::cast_slice(&geometry.indices),
                 usage: wgpu::BufferUsage::INDEX,
             });
 
-        (vertex_buffer, index_buffer, indices.len())
+        (vertex_buffer, index_buffer, geometry.index_count())
     }
 }

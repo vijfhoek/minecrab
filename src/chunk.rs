@@ -1,6 +1,6 @@
-use std::{collections::VecDeque, convert::TryInto, usize};
+use std::{collections::VecDeque, usize};
 
-use crate::{cube, quad::Quad, vertex::BlockVertex};
+use crate::{cube, geometry::Geometry, quad::Quad, vertex::BlockVertex};
 use ahash::{AHashMap, AHashSet};
 use cgmath::{Vector3, Zero};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
@@ -321,13 +321,13 @@ impl Chunk {
 
     fn quads_to_geometry(
         quads: Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)>,
-    ) -> (Vec<BlockVertex>, Vec<u16>) {
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
+    ) -> Geometry<BlockVertex> {
+        let mut geometry: Geometry<BlockVertex> = Default::default();
+
         for (block_type, y, offset, quad, highlighted, visible_faces) in quads {
             let texture_indices = block_type.texture_indices();
 
-            let (quad_vertices, quad_indices) = &cube::vertices(
+            geometry.append(&mut cube::vertices(
                 &quad,
                 y,
                 1.0,
@@ -335,21 +335,18 @@ impl Chunk {
                 texture_indices,
                 highlighted,
                 visible_faces,
-                vertices.len().try_into().unwrap(),
-            );
-
-            vertices.extend(quad_vertices);
-            indices.extend(quad_indices);
+                geometry.vertices.len() as u16,
+            ));
         }
 
-        (vertices, indices)
+        geometry
     }
 
     pub fn to_geometry(
         &self,
         offset: Vector3<i32>,
         highlighted: Option<&(Vector3<usize>, Vector3<i32>)>,
-    ) -> (Vec<BlockVertex>, Vec<u16>) {
+    ) -> Geometry<BlockVertex> {
         let mut quads: Vec<(BlockType, i32, Vector3<i32>, Quad, Vector3<i32>, FaceFlags)> =
             Vec::new();
 

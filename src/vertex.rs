@@ -2,26 +2,30 @@ use std::mem::size_of;
 
 use wgpu::VertexAttribute;
 
+pub trait Vertex {
+    fn descriptor() -> wgpu::VertexBufferLayout<'static>;
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Vertex {
+pub struct PlainVertex {
     pub position: [f32; 3],
     pub texture_coordinates: [f32; 2],
     pub normal: [f32; 3],
 }
 
-const VERTEX_ATTRIBUTES: &[VertexAttribute] = &wgpu::vertex_attr_array![
+const PLAIN_VERTEX_ATTRIBUTES: &[VertexAttribute] = &wgpu::vertex_attr_array![
     0 => Float32x3,
     1 => Float32x2,
     2 => Float32x3,
 ];
 
-impl Vertex {
-    pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
+impl Vertex for PlainVertex {
+    fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
-            attributes: VERTEX_ATTRIBUTES,
+            attributes: PLAIN_VERTEX_ATTRIBUTES,
         }
     }
 }
@@ -41,8 +45,8 @@ const HUD_VERTEX_ATTRIBUTES: &[VertexAttribute] = &wgpu::vertex_attr_array![
     1 => Float32x2,
 ];
 
-impl HudVertex {
-    pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
+impl Vertex for HudVertex {
+    fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
@@ -74,8 +78,8 @@ const BLOCK_VERTEX_ATTRIBUTES: &[VertexAttribute] = &wgpu::vertex_attr_array![
     4 => Sint32,
 ];
 
-impl BlockVertex {
-    pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
+impl Vertex for BlockVertex {
+    fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,

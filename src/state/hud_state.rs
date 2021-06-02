@@ -10,7 +10,7 @@ use crate::{
     render_context::RenderContext,
     text_renderer::{self, TextRenderer},
     texture::Texture,
-    vertex::HudVertex,
+    vertex::{HudVertex, Vertex},
 };
 
 const UI_SCALE_X: f32 = 0.0045;

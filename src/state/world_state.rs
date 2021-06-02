@@ -4,7 +4,7 @@ use ahash::AHashMap;
 use cgmath::{EuclideanSpace, InnerSpace, Point3, Rad, Vector2, Vector3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    CommandEncoder, SwapChainTexture,
+    BufferUsage, CommandEncoder, SwapChainTexture,
 };
 use winit::{
     dpi::PhysicalSize,
@@ -14,6 +14,7 @@ use winit::{
 use crate::{
     camera::{Camera, Projection},
     chunk::{Block, BlockType, CHUNK_SIZE},
+    geometry::GeometryBuffers,
     render_context::RenderContext,
     texture::{Texture, TextureManager},
     time::Time,
@@ -34,7 +35,7 @@ pub struct WorldState {
     pub time_bind_group: wgpu::BindGroup,
     pub world: World,
 
-    pub chunk_buffers: AHashMap<Vector3<usize>, (wgpu::Buffer, wgpu::Buffer, usize)>,
+    pub chunk_buffers: AHashMap<Vector3<usize>, GeometryBuffers>,
     time: Time,
     time_buffer: wgpu::Buffer,
     wireframe: bool,
@@ -221,26 +222,12 @@ impl WorldState {
         let world_geometry = self.world.to_geometry(self.highlighted);
         self.chunk_buffers.clear();
         for (chunk_position, chunk_geometry) in world_geometry {
-            self.chunk_buffers.insert(
-                chunk_position,
-                (
-                    render_context
-                        .device
-                        .create_buffer_init(&BufferInitDescriptor {
-                            label: None,
-                            contents: &bytemuck::cast_slice(&chunk_geometry.vertices),
-                            usage: wgpu::BufferUsage::VERTEX,
-                        }),
-                    render_context
-                        .device
-                        .create_buffer_init(&BufferInitDescriptor {
-                            label: None,
-                            contents: &bytemuck::cast_slice(&chunk_geometry.indices),
-                            usage: wgpu::BufferUsage::INDEX,
-                        }),
-                    chunk_geometry.index_count(),
-                ),
+            let buffers = GeometryBuffers::from_geometry(
+                render_context,
+                &chunk_geometry,
+                BufferUsage::empty(),
             );
+            self.chunk_buffers.insert(chunk_position, buffers);
         }
 
         let elapsed = instant.elapsed();
@@ -259,26 +246,9 @@ impl WorldState {
             World::highlighted_for_chunk(self.highlighted, chunk_position).as_ref(),
         );
 
-        self.chunk_buffers.insert(
-            chunk_position,
-            (
-                render_context
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: &bytemuck::cast_slice(&geometry.vertices),
-                        usage: wgpu::BufferUsage::VERTEX,
-                    }),
-                render_context
-                    .device
-                    .create_buffer_init(&BufferInitDescriptor {
-                        label: None,
-                        contents: &bytemuck::cast_slice(&geometry.indices),
-                        usage: wgpu::BufferUsage::INDEX,
-                    }),
-                geometry.index_count(),
-            ),
-        );
+        let buffers =
+            GeometryBuffers::from_geometry(render_context, &geometry, BufferUsage::empty());
+        self.chunk_buffers.insert(chunk_position, buffers);
     }
 
     pub fn toggle_wireframe(&mut self, render_context: &RenderContext) {
@@ -401,17 +371,16 @@ impl WorldState {
         let camera_pos = self.camera.position.to_vec();
         let camera_pos = Vector2::new(camera_pos.x, camera_pos.z);
 
-        for (position, (chunk_vertices, chunk_indices, index_count)) in &self.chunk_buffers {
+        for (position, buffers) in &self.chunk_buffers {
             let pos = (position * CHUNK_SIZE).cast().unwrap();
             let pos = Vector2::new(pos.x, pos.z);
             if (pos - camera_pos).magnitude() > 300.0 {
                 continue;
             }
 
-            render_pass.set_vertex_buffer(0, chunk_vertices.slice(..));
-            render_pass.set_index_buffer(chunk_indices.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..*index_count as u32, 0, 0..1);
-            triangle_count += index_count / 3;
+            buffers.set_buffers(&mut render_pass);
+            buffers.draw_indexed(&mut render_pass);
+            triangle_count += buffers.index_count / 3;
         }
 
         triangle_count

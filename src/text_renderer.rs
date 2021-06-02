@@ -1,9 +1,10 @@
 use std::convert::TryInto;
 
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-
 use crate::{
-    geometry::Geometry, render_context::RenderContext, texture::Texture, vertex::HudVertex,
+    geometry::{Geometry, GeometryBuffers},
+    render_context::RenderContext,
+    texture::Texture,
+    vertex::HudVertex,
 };
 
 pub const DX: f32 = 20.0 / 640.0;
@@ -152,25 +153,8 @@ impl TextRenderer {
         x: f32,
         y: f32,
         string: &str,
-    ) -> (wgpu::Buffer, wgpu::Buffer, usize) {
+    ) -> GeometryBuffers {
         let geometry = self.string_geometry(x, y, string);
-
-        let vertex_buffer = render_context
-            .device
-            .create_buffer_init(&BufferInitDescriptor {
-                label: Some("font renderer"),
-                contents: bytemuck::cast_slice(&geometry.vertices),
-                usage: wgpu::BufferUsage::VERTEX,
-            });
-
-        let index_buffer = render_context
-            .device
-            .create_buffer_init(&BufferInitDescriptor {
-                label: Some("font renderer"),
-                contents: bytemuck::cast_slice(&geometry.indices),
-                usage: wgpu::BufferUsage::INDEX,
-            });
-
-        (vertex_buffer, index_buffer, geometry.index_count())
+        GeometryBuffers::from_geometry(render_context, &geometry, wgpu::BufferUsage::empty())
     }
 }

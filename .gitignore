@@ -2,3 +2,7 @@
 /generated/
 /flamegraph.svg
 /perf.data*
+/chunks/
+
+profile.txt
+callgrind.out.*

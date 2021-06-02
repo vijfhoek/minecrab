@@ -19,6 +19,11 @@ noise = "0.7.0"
 rayon = "1.5.1"
 wgpu = "0.8.1"
 winit = { version = "0.25.0", default_features = false, features = ["x11", "web-sys"] }
+serde_repr = "0.1.7"
+rmp-serde = "0.15.4"
+itertools = "0.10.0"
+serde = { version = "1.0.126", features = ["derive"] }
+zstd = "0.8.2"
 
 [profile.release]
 debug = true

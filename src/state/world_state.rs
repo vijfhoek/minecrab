@@ -429,12 +429,14 @@ impl WorldState {
         let camera = &self.camera;
 
         let world = &mut self.world;
-        if let Some((pos, axis)) = world.raycast(camera.position.to_vec(), camera.direction()) {
+        if let Some((pos, face_normal)) =
+            world.raycast(camera.position.to_vec(), camera.direction())
+        {
             if button == &MouseButton::Left {
                 world.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
                 self.update_chunk_geometry(render_context, pos / CHUNK_SIZE);
             } else if button == &MouseButton::Right {
-                let new_pos = pos.cast().unwrap() - axis;
+                let new_pos = pos.cast().unwrap() + face_normal;
 
                 world.set_block(
                     new_pos.x as isize,

@@ -179,15 +179,15 @@ impl World {
             if lengths.x < lengths.y && lengths.x < lengths.z {
                 lengths.x += scale.x;
                 position.x += step.x;
-                face = Vector3::unit_x() * step.x;
+                face = Vector3::unit_x() * -step.x;
             } else if lengths.y < lengths.x && lengths.y < lengths.z {
                 lengths.y += scale.y;
                 position.y += step.y;
-                face = Vector3::unit_y() * step.y;
+                face = Vector3::unit_y() * -step.y;
             } else if lengths.z < lengths.x && lengths.z < lengths.y {
                 lengths.z += scale.z;
                 position.z += step.z;
-                face = Vector3::unit_z() * step.z;
+                face = Vector3::unit_z() * -step.z;
             } else {
                 return None;
             }

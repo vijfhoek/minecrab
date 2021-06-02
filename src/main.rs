@@ -1,7 +1,6 @@
 mod aabb;
 mod camera;
 mod chunk;
-mod cube;
 mod geometry;
 mod quad;
 mod render_context;

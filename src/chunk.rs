@@ -1,4 +1,8 @@
-use std::{collections::VecDeque, usize};
+use std::{
+    collections::VecDeque,
+    io::{Read, Write},
+    usize,
+};
 
 use crate::{geometry::Geometry, quad::Quad, vertex::BlockVertex};
 use ahash::{AHashMap, AHashSet};
@@ -6,17 +10,26 @@ use cgmath::{Point3, Vector3};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+use serde::Serialize;
+use serde::{
+    de::{SeqAccess, Visitor},
+    ser::{SerializeSeq, Serializer},
+    Deserialize,
+};
+use serde_repr::{Deserialize_repr, Serialize_repr};
+
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
 pub enum BlockType {
-    Cobblestone,
-    Dirt,
-    Stone,
-    Grass,
-    Bedrock,
-    Sand,
-    Gravel,
-    Water,
+    Cobblestone = 1,
+    Dirt = 2,
+    Stone = 3,
+    Grass = 4,
+    Bedrock = 5,
+    Sand = 6,
+    Gravel = 7,
+    Water = 8,
 }
 
 impl BlockType {
@@ -50,7 +63,7 @@ pub const FACE_FRONT: FaceFlags = 32;
 pub const FACE_ALL: FaceFlags =
     FACE_LEFT | FACE_RIGHT | FACE_BOTTOM | FACE_TOP | FACE_BACK | FACE_FRONT;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Block {
     pub block_type: BlockType,
 }
@@ -60,8 +73,61 @@ pub const CHUNK_ISIZE: isize = CHUNK_SIZE as isize;
 
 type ChunkBlocks = [[[Option<Block>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
 
+#[derive(Clone, Default)]
 pub struct Chunk {
     pub blocks: ChunkBlocks,
+}
+
+impl Serialize for Chunk {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(CHUNK_SIZE.pow(3)))?;
+        for layer in self.blocks.iter() {
+            for row in layer {
+                for block in row {
+                    seq.serialize_element(block)?;
+                }
+            }
+        }
+        seq.end()
+    }
+}
+
+struct ChunkVisitor;
+
+impl<'de> Visitor<'de> for ChunkVisitor {
+    type Value = Chunk;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a chunk")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let mut chunk = Chunk::default();
+        for layer in chunk.blocks.iter_mut() {
+            for row in layer {
+                for block in row {
+                    *block = seq.next_element()?.unwrap();
+                }
+            }
+        }
+
+        Ok(chunk)
+    }
+}
+
+impl<'de> Deserialize<'de> for Chunk {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_seq(ChunkVisitor)
+    }
 }
 
 impl Chunk {
@@ -332,5 +398,28 @@ impl Chunk {
             .collect();
 
         Self::quads_to_geometry(quads)
+    }
+
+    pub fn save(&self, position: Point3<isize>) -> anyhow::Result<()> {
+        let data = rmp_serde::encode::to_vec_named(self)?;
+        let compressed = zstd::block::compress(&data, 0)?;
+
+        let path = format!("chunks/{}_{}_{}.bin", position.x, position.y, position.z);
+        let mut file = std::fs::File::create(&path)?;
+        file.write(&compressed)?;
+
+        Ok(())
+    }
+
+    pub fn load(&mut self, position: Point3<isize>) -> anyhow::Result<()> {
+        let path = format!("chunks/{}_{}_{}.bin", position.x, position.y, position.z);
+        let mut file = std::fs::File::open(&path)?;
+
+        let mut compressed = Vec::new();
+        file.read_to_end(&mut compressed)?;
+        let data = zstd::block::decompress(&compressed, 1024 * 1024)?;
+
+        *self = rmp_serde::decode::from_slice(&data)?;
+        Ok(())
     }
 }

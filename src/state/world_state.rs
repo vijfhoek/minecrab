@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 use ahash::AHashMap;
 use cgmath::{EuclideanSpace, InnerSpace, Point3, Rad, Vector2, Vector3};
@@ -36,6 +39,8 @@ pub struct WorldState {
     pub world: World,
 
     pub chunk_buffers: AHashMap<Point3<isize>, GeometryBuffers>,
+    pub chunk_save_queue: VecDeque<Point3<isize>>,
+    pub chunk_load_queue: VecDeque<Point3<isize>>,
     time: Time,
     time_buffer: wgpu::Buffer,
     wireframe: bool,
@@ -336,6 +341,8 @@ impl WorldState {
 
             world,
             chunk_buffers: AHashMap::new(),
+            chunk_load_queue: VecDeque::new(),
+            chunk_save_queue: VecDeque::new(),
             wireframe: false,
             highlighted: None,
 
@@ -487,21 +494,23 @@ impl WorldState {
             VirtualKeyCode::A => self.left_pressed = pressed,
             VirtualKeyCode::D => self.right_pressed = pressed,
             VirtualKeyCode::F2 if pressed => self.creative = !self.creative,
+            VirtualKeyCode::F3 if pressed => self.chunk_save_queue.extend(self.world.chunks.keys()),
+            VirtualKeyCode::F4 if pressed => self.chunk_load_queue.extend(self.world.chunks.keys()),
             VirtualKeyCode::Space => {
-                self.up_speed = if self.creative {
-                    if pressed {
+                self.up_speed = if pressed {
+                    if self.creative {
                         1.0
                     } else {
-                        0.0
+                        0.6
                     }
                 } else {
-                    0.6
+                    0.0
                 }
             }
             VirtualKeyCode::LShift if self.creative => {
                 self.up_speed = if pressed { -1.0 } else { 0.0 }
             }
-            VirtualKeyCode::LControl => self.sprinting = state == ElementState::Pressed,
+            VirtualKeyCode::LControl => self.sprinting = pressed,
             _ => (),
         }
     }
@@ -510,7 +519,7 @@ impl WorldState {
         self.world
             .get_block(
                 position.x as isize,
-                (position.y - 1.62) as isize,
+                (position.y - 1.8) as isize,
                 position.z as isize,
             )
             .is_some()
@@ -556,6 +565,23 @@ impl WorldState {
     }
 
     pub fn update(&mut self, dt: Duration, render_context: &RenderContext) {
+        if let Some(position) = self.chunk_load_queue.pop_front() {
+            let chunk = self.world.chunks.entry(position).or_default();
+            if let Err(err) = chunk.load(position) {
+                eprintln!("Failed to load chunk {:?}: {:?}", position, err);
+            } else {
+                self.update_chunk_geometry(render_context, position);
+                println!("Loaded chunk {:?}", position);
+            }
+        } else if let Some(position) = self.chunk_save_queue.pop_front() {
+            let chunk = self.world.chunks.get(&position).unwrap();
+            if let Err(err) = chunk.save(position) {
+                eprintln!("Failed to save chunk {:?}: {:?}", position, err);
+            } else {
+                println!("Saved chunk {:?}", position);
+            }
+        }
+
         self.update_position(dt);
         self.update_aim(render_context);
 

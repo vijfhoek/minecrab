@@ -4,6 +4,7 @@ use crate::{geometry::Geometry, quad::Quad, vertex::BlockVertex};
 use ahash::{AHashMap, AHashSet};
 use cgmath::Vector3;
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

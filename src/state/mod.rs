@@ -15,6 +15,16 @@ use world_state::WorldState;
 
 use crate::render_context::RenderContext;
 
+pub const PRIMITIVE_STATE: wgpu::PrimitiveState = wgpu::PrimitiveState {
+    topology: wgpu::PrimitiveTopology::TriangleList,
+    strip_index_format: None,
+    front_face: wgpu::FrontFace::Ccw,
+    cull_mode: None,
+    polygon_mode: wgpu::PolygonMode::Fill,
+    clamp_depth: false,
+    conservative: false,
+};
+
 pub struct State {
     pub window_size: PhysicalSize<u32>,
     render_context: RenderContext,
@@ -174,9 +184,8 @@ impl State {
     }
 
     pub fn device_event(&mut self, event: &DeviceEvent) {
-        match event {
-            DeviceEvent::MouseMotion { delta: (dx, dy) } => self.input_mouse(*dx, *dy),
-            _ => (),
+        if let DeviceEvent::MouseMotion { delta } = event {
+            self.input_mouse(delta.0, delta.1)
         }
     }
 

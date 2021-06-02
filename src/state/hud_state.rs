@@ -6,11 +6,13 @@ use wgpu::{BufferUsage, CommandEncoder, SwapChainTexture};
 use crate::{
     geometry::{Geometry, GeometryBuffers},
     render_context::RenderContext,
+    state::PRIMITIVE_STATE,
     text_renderer::{self, TextRenderer},
     texture::Texture,
     vertex::{HudVertex, Vertex},
 };
 
+// TODO update aspect ratio when resizing
 const UI_SCALE_X: f32 = 0.0045;
 const UI_SCALE_Y: f32 = 0.008;
 
@@ -108,7 +110,6 @@ impl HudState {
         render_encoder: &mut CommandEncoder,
     ) -> anyhow::Result<usize> {
         let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("render_pass"),
             color_attachments: &[wgpu::RenderPassColorAttachment {
                 view: &frame.view,
                 resolve_target: None,
@@ -117,12 +118,12 @@ impl HudState {
                     store: true,
                 },
             }],
-            depth_stencil_attachment: None,
+            ..Default::default()
         });
 
         render_pass.set_pipeline(&self.render_pipeline);
 
-        // Render the crosshair and
+        // Render the HUD elements
         self.hud_geometry_buffers.set_buffers(&mut render_pass);
         render_pass.set_bind_group(0, &self.texture_bind_group, &[]);
         self.hud_geometry_buffers.draw_indexed(&mut render_pass);
@@ -143,7 +144,7 @@ impl HudState {
         Ok(HUD_INDICES.len() / 3)
     }
 
-    pub fn update_hotbar_cursor(&self, render_context: &RenderContext) {
+    pub fn redraw_hotbar_cursor(&self, render_context: &RenderContext) {
         let x = (-92 + 20 * self.hotbar_cursor_position) as f32;
 
         #[rustfmt::skip]
@@ -163,12 +164,12 @@ impl HudState {
 
     pub fn set_hotbar_cursor(&mut self, render_context: &RenderContext, i: i32) {
         self.hotbar_cursor_position = i;
-        self.update_hotbar_cursor(render_context);
+        self.redraw_hotbar_cursor(render_context);
     }
 
     pub fn move_hotbar_cursor(&mut self, render_context: &RenderContext, delta: i32) {
         self.hotbar_cursor_position = (self.hotbar_cursor_position + delta).rem_euclid(9);
-        self.update_hotbar_cursor(render_context);
+        self.redraw_hotbar_cursor(render_context);
     }
 
     fn create_textures(render_context: &RenderContext) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
@@ -275,21 +276,9 @@ impl HudState {
                         write_mask: wgpu::ColorWrite::ALL,
                     }],
                 }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    clamp_depth: false,
-                    conservative: false,
-                },
+                primitive: PRIMITIVE_STATE,
                 depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
+                multisample: Default::default(),
             })
     }
 }

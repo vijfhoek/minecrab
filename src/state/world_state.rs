@@ -258,6 +258,27 @@ impl WorldState {
         println!("World update took {:?}", elapsed);
     }
 
+    pub fn load_npc_geometry(
+        &mut self,
+        render_context: &RenderContext,
+    ) {
+        self.world.npc.vertex_buffer = Some(render_context
+        .device
+        .create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: &bytemuck::cast_slice(&self.world.npc.vertices),
+            usage: wgpu::BufferUsage::VERTEX,
+        }));
+
+        self.world.npc.index_buffer = Some(render_context
+        .device
+        .create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: &bytemuck::cast_slice(&self.world.npc.indices),
+            usage: wgpu::BufferUsage::INDEX,
+        }));
+    }
+
     pub fn update_chunk_geometry(
         &mut self,
         render_context: &RenderContext,
@@ -370,6 +391,7 @@ impl WorldState {
         };
 
         world_state.update_world_geometry(render_context);
+        world_state.load_npc_geometry(render_context);
 
         world_state
     }
@@ -423,6 +445,15 @@ impl WorldState {
             render_pass.set_index_buffer(chunk_indices.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..*index_count as u32, 0, 0..1);
             triangle_count += index_count / 3;
+        }
+
+        {
+            let vertex_buffer = self.world.npc.vertex_buffer.unwrap();
+            let index_buffer = self.world.npc.index_buffer.unwrap();
+
+            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..self.world.npc.indices.len() as u32 , 0, 0..1);
         }
 
         triangle_count

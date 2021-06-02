@@ -1,12 +1,14 @@
 use crate::{
     chunk::{Block, Chunk, CHUNK_SIZE},
     vertex::Vertex,
+    npc::Npc,
 };
 use cgmath::{InnerSpace, Vector3};
 use rayon::prelude::*;
 
 pub struct World {
     pub chunks: Vec<Vec<Vec<Chunk>>>,
+    pub npc: Npc
 }
 
 const WORLD_SIZE: Vector3<usize> = Vector3::new(
@@ -18,6 +20,8 @@ const WORLD_SIZE: Vector3<usize> = Vector3::new(
 impl World {
     pub fn generate() -> Self {
         let mut chunks = Vec::new();
+
+        let npc = Npc::load();
 
         (0..WORLD_SIZE.y)
             .into_par_iter()
@@ -35,7 +39,7 @@ impl World {
             })
             .collect_into_vec(&mut chunks);
 
-        Self { chunks }
+        Self { chunks, npc }
     }
 
     pub fn highlighted_for_chunk(

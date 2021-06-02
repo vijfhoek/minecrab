@@ -11,6 +11,7 @@ mod time;
 mod uniforms;
 mod vertex;
 mod world;
+mod npc;
 
 use std::time::{Duration, Instant};
 use wgpu::SwapChainError;

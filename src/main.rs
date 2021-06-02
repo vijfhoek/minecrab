@@ -18,10 +18,69 @@ use winit::{
     dpi::{PhysicalSize, Size},
     event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
+    window::{Window, WindowBuilder},
 };
 
 use crate::state::State;
+
+fn handle_window_event(
+    event: &WindowEvent,
+    state: &mut State,
+    window: &Window,
+) -> Option<ControlFlow> {
+    match event {
+        WindowEvent::CloseRequested => Some(ControlFlow::Exit),
+        WindowEvent::KeyboardInput {
+            input:
+                KeyboardInput {
+                    state: ElementState::Pressed,
+                    virtual_keycode: Some(VirtualKeyCode::Escape),
+                    ..
+                },
+            ..
+        } => {
+            let _ = window.set_cursor_grab(false);
+            window.set_cursor_visible(true);
+            state.mouse_grabbed = false;
+            None
+        }
+        WindowEvent::Resized(physical_size) => {
+            state.resize(*physical_size);
+            None
+        }
+        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+            state.resize(**new_inner_size);
+            None
+        }
+        WindowEvent::MouseInput {
+            state: mouse_state,
+            button,
+            ..
+        } => {
+            if !state.mouse_grabbed
+                && *button == MouseButton::Left
+                && *mouse_state == ElementState::Pressed
+            {
+                let _ = window.set_cursor_grab(true);
+                window.set_cursor_visible(false);
+                state.mouse_grabbed = true;
+            } else {
+                state.window_event(event);
+            }
+            None
+        }
+        WindowEvent::Focused(false) => {
+            let _ = window.set_cursor_grab(false);
+            window.set_cursor_visible(true);
+            state.mouse_grabbed = false;
+            None
+        }
+        event => {
+            state.window_event(event);
+            None
+        }
+    }
+}
 
 fn main() {
     env_logger::init();
@@ -53,47 +112,11 @@ fn main() {
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == window.id() => match event {
-                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                WindowEvent::KeyboardInput {
-                    input:
-                        KeyboardInput {
-                            state: ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::Escape),
-                            ..
-                        },
-                    ..
-                } => {
-                    let _ = window.set_cursor_grab(false);
-                    window.set_cursor_visible(true);
-                    state.mouse_grabbed = false;
+            } if window_id == window.id() => {
+                if let Some(cf) = handle_window_event(event, &mut state, &window) {
+                    *control_flow = cf
                 }
-                WindowEvent::Resized(physical_size) => {
-                    state.resize(*physical_size);
-                }
-                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                    state.resize(**new_inner_size);
-                }
-                WindowEvent::MouseInput {
-                    state: mouse_state,
-                    button,
-                    ..
-                } => {
-                    if !state.mouse_grabbed && *button == MouseButton::Left && *mouse_state == ElementState::Pressed {
-                        let _ = window.set_cursor_grab(true);
-                        window.set_cursor_visible(false);
-                        state.mouse_grabbed = true;
-                    } else {
-                        state.window_event(event);
-                    }
-                }
-                WindowEvent::Focused(false) => {
-                    let _ = window.set_cursor_grab(false);
-                    window.set_cursor_visible(true);
-                    state.mouse_grabbed = false;
-                }
-                event => { state.window_event(event); }
-            },
+            }
             Event::RedrawRequested(_) => {
                 let frame_elapsed = frame_instant.elapsed();
                 frame_instant = Instant::now();

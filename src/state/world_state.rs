@@ -448,11 +448,11 @@ impl WorldState {
         }
 
         {
-            let vertex_buffer = self.world.npc.vertex_buffer.unwrap();
-            let index_buffer = self.world.npc.index_buffer.unwrap();
+            let vertex_buffer = self.world.npc.vertex_buffer.as_ref();
+            let index_buffer = self.world.npc.index_buffer.as_ref();
 
-            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.set_vertex_buffer(0, vertex_buffer.unwrap().slice(..));
+            render_pass.set_index_buffer(index_buffer.unwrap().slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..self.world.npc.indices.len() as u32 , 0, 0..1);
         }
 

@@ -2,11 +2,15 @@ use std::{collections::VecDeque, time::Duration};
 
 use crate::{
     camera::Camera,
-    chunk::{Block, BlockType, Chunk, CHUNK_ISIZE},
     geometry::GeometryBuffers,
     npc::Npc,
     render_context::RenderContext,
+    renderable::Renderable,
     view::View,
+    world::{
+        block::{Block, BlockType},
+        chunk::{Chunk, CHUNK_ISIZE},
+    },
 };
 use ahash::AHashMap;
 use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3};
@@ -31,34 +35,8 @@ pub const WORLD_HEIGHT: isize = 16 * 16 / CHUNK_ISIZE;
 
 const DEBUG_IO: bool = false;
 
-impl World {
-    pub fn new() -> Self {
-        let chunks = AHashMap::new();
-        let npc = Npc::load();
-
-        let chunk_database = sled::Config::new()
-            .path("chunks")
-            .mode(sled::Mode::HighThroughput)
-            .use_compression(true)
-            .open()
-            .unwrap();
-
-        Self {
-            chunks,
-            npc,
-
-            chunk_database,
-            chunk_load_queue: VecDeque::new(),
-            chunk_save_queue: VecDeque::new(),
-            chunk_generate_queue: VecDeque::new(),
-
-            highlighted: None,
-
-            unload_timer: Duration::new(0, 0),
-        }
-    }
-
-    pub fn update(&mut self, dt: Duration, render_context: &RenderContext, camera: &Camera) {
+impl Renderable for World {
+    fn update(&mut self, render_context: &RenderContext, dt: Duration, camera: &Camera) {
         if let Some(position) = self.chunk_load_queue.pop_front() {
             let chunk = self.chunks.entry(position).or_default();
             match chunk.load(position, &self.chunk_database) {
@@ -144,7 +122,7 @@ impl World {
         }
     }
 
-    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, view: &View) -> usize {
+    fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, view: &View) -> usize {
         let mut triangle_count = 0;
 
         for (position, chunk) in &self.chunks {
@@ -165,6 +143,34 @@ impl World {
         }
 
         triangle_count
+    }
+}
+
+impl World {
+    pub fn new() -> Self {
+        let chunks = AHashMap::new();
+        let npc = Npc::load();
+
+        let chunk_database = sled::Config::new()
+            .path("chunks")
+            .mode(sled::Mode::HighThroughput)
+            .use_compression(true)
+            .open()
+            .unwrap();
+
+        Self {
+            chunks,
+            npc,
+
+            chunk_database,
+            chunk_load_queue: VecDeque::new(),
+            chunk_save_queue: VecDeque::new(),
+            chunk_generate_queue: VecDeque::new(),
+
+            highlighted: None,
+
+            unload_timer: Duration::new(0, 0),
+        }
     }
 
     pub fn enqueue_chunk_save(&mut self, position: Point3<isize>, unload: bool) {

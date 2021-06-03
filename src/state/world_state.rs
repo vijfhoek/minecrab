@@ -13,11 +13,12 @@ use winit::{
 use crate::{
     camera::{Camera, Projection},
     render_context::RenderContext,
+    renderable::Renderable,
     texture::{Texture, TextureManager},
     time::Time,
     vertex::{BlockVertex, Vertex},
     view::View,
-    world::World,
+    world::world::World,
 };
 
 pub struct WorldState {
@@ -428,7 +429,7 @@ impl WorldState {
     pub fn update(&mut self, dt: Duration, render_context: &RenderContext) {
         self.update_position(dt);
 
-        self.world.update(dt, render_context, &self.camera);
+        self.world.update(render_context, dt, &self.camera);
 
         self.view
             .update_view_projection(&self.camera, &self.projection);

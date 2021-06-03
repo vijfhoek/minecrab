@@ -20,8 +20,8 @@ pub const PRIMITIVE_STATE: wgpu::PrimitiveState = wgpu::PrimitiveState {
     strip_index_format: None,
     front_face: wgpu::FrontFace::Ccw,
     cull_mode: None,
-    polygon_mode: wgpu::PolygonMode::Fill,
     clamp_depth: false,
+    polygon_mode: wgpu::PolygonMode::Fill,
     conservative: false,
 };
 
@@ -47,6 +47,7 @@ impl State {
             })
             .await
             .unwrap();
+        println!("Using {:?}", adapter.get_info().backend);
 
         let (render_device, queue) = adapter
             .request_device(

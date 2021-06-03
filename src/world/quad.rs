@@ -1,12 +1,9 @@
 use cgmath::{Point3, Vector3, Zero};
 
 use crate::{
-    chunk::{
-        BlockType, FaceFlags, FACE_ALL, FACE_BACK, FACE_BOTTOM, FACE_FRONT, FACE_LEFT, FACE_RIGHT,
-        FACE_TOP,
-    },
     geometry::Geometry,
     vertex::BlockVertex,
+    world::{block::BlockType, face_flags::*},
 };
 
 #[derive(Debug)]

@@ -368,8 +368,8 @@ impl Chunk {
         quads
     }
 
-    fn quads_to_geometry(quads: Vec<Quad>) -> Geometry<BlockVertex> {
-        let mut geometry: Geometry<BlockVertex> = Default::default();
+    fn quads_to_geometry(quads: Vec<Quad>) -> Geometry<BlockVertex, u16> {
+        let mut geometry: Geometry<BlockVertex, u16> = Default::default();
         for quad in quads {
             geometry.append(&mut quad.to_geometry(geometry.vertices.len() as u16));
         }
@@ -380,7 +380,7 @@ impl Chunk {
         &self,
         position: Point3<isize>,
         highlighted: Option<&(Point3<usize>, Vector3<i32>)>,
-    ) -> Geometry<BlockVertex> {
+    ) -> Geometry<BlockVertex, u16> {
         let quads: Vec<Quad> = (0..CHUNK_SIZE)
             .into_par_iter()
             .flat_map(|y| {

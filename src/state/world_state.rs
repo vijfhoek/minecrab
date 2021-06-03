@@ -212,25 +212,6 @@ impl WorldState {
             })
     }
 
-    /// TODO Move to World
-    pub fn load_npc_geometry(&mut self, render_context: &RenderContext) {
-        self.world.npc.vertex_buffer = Some(render_context.device.create_buffer_init(
-            &BufferInitDescriptor {
-                label: None,
-                contents: &bytemuck::cast_slice(&self.world.npc.vertices),
-                usage: wgpu::BufferUsage::VERTEX,
-            },
-        ));
-
-        self.world.npc.index_buffer = Some(render_context.device.create_buffer_init(
-            &BufferInitDescriptor {
-                label: None,
-                contents: &bytemuck::cast_slice(&self.world.npc.indices),
-                usage: wgpu::BufferUsage::INDEX,
-            },
-        ));
-    }
-
     pub fn toggle_wireframe(&mut self, render_context: &RenderContext) {
         self.wireframe = !self.wireframe;
         self.render_pipeline = Self::create_render_pipeline(
@@ -251,7 +232,8 @@ impl WorldState {
 
         let (time, time_buffer, time_layout, time_bind_group) = Self::create_time(render_context);
 
-        let world = World::new();
+        let mut world = World::new();
+        world.npc.load_geometry(render_context);
 
         let shader = render_context.device.create_shader_module(
             &(wgpu::ShaderModuleDescriptor {
@@ -277,7 +259,7 @@ impl WorldState {
             Self::create_render_pipeline(&render_context, &shader, &render_pipeline_layout, false);
         let depth_texture = Texture::create_depth_texture(render_context, "depth_texture");
 
-        let mut world_state = Self {
+        Self {
             render_pipeline,
             view,
             view_buffer,
@@ -304,11 +286,7 @@ impl WorldState {
             left_pressed: false,
             right_pressed: false,
             creative: true,
-        };
-
-        world_state.load_npc_geometry(render_context);
-
-        world_state
+        }
     }
 
     pub fn render(&self, frame: &SwapChainTexture, render_encoder: &mut CommandEncoder) -> usize {

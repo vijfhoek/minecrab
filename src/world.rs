@@ -19,7 +19,7 @@ pub struct World {
     pub chunk_save_queue: VecDeque<Point3<isize>>,
     pub chunk_load_queue: VecDeque<Point3<isize>>,
     pub chunk_generate_queue: VecDeque<Point3<isize>>,
-    pub chunk_buffers: AHashMap<Point3<isize>, GeometryBuffers>,
+    pub chunk_buffers: AHashMap<Point3<isize>, GeometryBuffers<u16>>,
 
     pub highlighted: Option<(Point3<isize>, Vector3<i32>)>,
 }
@@ -117,15 +117,13 @@ impl World {
             }
 
             buffers.set_buffers(render_pass);
-            buffers.draw_indexed(render_pass);
-            triangle_count += buffers.index_count / 3;
+            triangle_count += buffers.draw_indexed(render_pass);
         }
 
         {
             let buffers = self.npc.geometry_buffers.as_ref().unwrap();
             buffers.set_buffers(render_pass);
-            render_pass.draw_indexed(0..self.npc.indices.len() as u32, 0, 0..1);
-            triangle_count += self.npc.indices.len() / 3;
+            triangle_count += buffers.draw_indexed(render_pass);
         }
 
         triangle_count

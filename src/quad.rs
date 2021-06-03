@@ -52,7 +52,7 @@ impl Quad {
     pub fn to_geometry(
         &self,
         start_index: u16,
-    ) -> Geometry<BlockVertex> {
+    ) -> Geometry<BlockVertex, u16> {
         let dx = self.dx as f32;
         let dz = self.dz as f32;
         let dy = 1.0;

@@ -124,7 +124,12 @@ impl TextRenderer {
         (vertices, indices)
     }
 
-    pub fn string_geometry(&self, mut x: f32, mut y: f32, string: &str) -> Geometry<HudVertex> {
+    pub fn string_geometry(
+        &self,
+        mut x: f32,
+        mut y: f32,
+        string: &str,
+    ) -> Geometry<HudVertex, u16> {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
 
@@ -153,7 +158,7 @@ impl TextRenderer {
         x: f32,
         y: f32,
         string: &str,
-    ) -> GeometryBuffers {
+    ) -> GeometryBuffers<u16> {
         let geometry = self.string_geometry(x, y, string);
         GeometryBuffers::from_geometry(render_context, &geometry, wgpu::BufferUsage::empty())
     }

@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     RenderPass,
@@ -7,13 +9,13 @@ use crate::{render_context::RenderContext, vertex::Vertex};
 
 /// Represents a set of triangles by its vertices and indices.
 #[derive(Default)]
-pub struct Geometry<T: Vertex> {
-    pub vertices: Vec<T>,
-    pub indices: Vec<u16>,
+pub struct Geometry<V: Vertex, I> {
+    pub vertices: Vec<V>,
+    pub indices: Vec<I>,
 }
 
-impl<T: Vertex> Geometry<T> {
-    pub fn new(vertices: Vec<T>, indices: Vec<u16>) -> Self {
+impl<T: Vertex, I> Geometry<T, I> {
+    pub fn new(vertices: Vec<T>, indices: Vec<I>) -> Self {
         Self { vertices, indices }
     }
 
@@ -29,16 +31,19 @@ impl<T: Vertex> Geometry<T> {
     }
 }
 
-pub struct GeometryBuffers {
+pub struct GeometryBuffers<I> {
     pub vertices: wgpu::Buffer,
     pub indices: wgpu::Buffer,
     pub index_count: usize,
+
+    // Phantom data to store the index type
+    _phantom: PhantomData<I>,
 }
 
-impl GeometryBuffers {
-    pub fn from_geometry<T: Vertex + bytemuck::Pod>(
+impl<I: bytemuck::Pod> GeometryBuffers<I> {
+    pub fn from_geometry<V: Vertex + bytemuck::Pod>(
         render_context: &RenderContext,
-        geometry: &Geometry<T>,
+        geometry: &Geometry<V, I>,
         usage: wgpu::BufferUsage,
     ) -> Self {
         let vertices = render_context
@@ -61,15 +66,26 @@ impl GeometryBuffers {
             vertices,
             indices,
             index_count: geometry.index_count(),
+            _phantom: PhantomData,
         }
     }
 
+    pub fn draw_indexed(&self, render_pass: &mut RenderPass) -> usize {
+        render_pass.draw_indexed(0..self.index_count as u32, 0, 0..1);
+        self.index_count / 3
+    }
+}
+
+impl GeometryBuffers<u16> {
     pub fn set_buffers<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
         render_pass.set_vertex_buffer(0, self.vertices.slice(..));
         render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);
     }
+}
 
-    pub fn draw_indexed(&self, render_pass: &mut RenderPass) {
-        render_pass.draw_indexed(0..self.index_count as u32, 0, 0..1);
+impl GeometryBuffers<u32> {
+    pub fn set_buffers<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
+        render_pass.set_vertex_buffer(0, self.vertices.slice(..));
+        render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
     }
 }

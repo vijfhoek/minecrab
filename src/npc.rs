@@ -2,17 +2,20 @@ extern crate gltf;
 extern crate wgpu;
 
 use cgmath::Vector3;
+use wgpu::BufferUsage;
 
-use crate::vertex::BlockVertex;
+use crate::{
+    geometry::{Geometry, GeometryBuffers},
+    render_context::RenderContext,
+    vertex::BlockVertex,
+};
 
 pub struct Npc {
     pub position: Vector3<f32>,
     pub scale: Vector3<f32>,
     pub rotation: Vector3<f32>,
-    pub vertices: Vec<BlockVertex>,
-    pub indices: Vec<u32>,
-    pub vertex_buffer: Option<wgpu::Buffer>,
-    pub index_buffer: Option<wgpu::Buffer>,
+    pub geometry: Geometry<BlockVertex, u32>,
+    pub geometry_buffers: Option<GeometryBuffers<u32>>,
 }
 
 impl Npc {
@@ -56,10 +59,16 @@ impl Npc {
             position,
             scale,
             rotation,
-            indices,
-            vertices,
-            vertex_buffer: None,
-            index_buffer: None,
+            geometry: Geometry::new(vertices, indices),
+            geometry_buffers: None,
         };
+    }
+
+    pub fn load_geometry(&mut self, render_context: &RenderContext) {
+        self.geometry_buffers = Some(GeometryBuffers::from_geometry(
+            render_context,
+            &self.geometry,
+            BufferUsage::empty(),
+        ));
     }
 }

@@ -19,16 +19,16 @@ const UI_SCALE_Y: f32 = 0.008;
 pub struct HudState {
     texture_bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
-    hud_geometry_buffers: GeometryBuffers,
+    hud_geometry_buffers: GeometryBuffers<u16>,
 
     text_renderer: TextRenderer,
 
-    fps_geometry_buffers: GeometryBuffers,
+    fps_geometry_buffers: GeometryBuffers<u16>,
     fps_instant: Instant,
     fps_frames: u32,
     fps_elapsed: Duration,
 
-    coordinates_geometry_buffers: GeometryBuffers,
+    coordinates_geometry_buffers: GeometryBuffers<u16>,
     coordinates_last: Vector3<f32>,
     pub hotbar_cursor_position: i32,
 }

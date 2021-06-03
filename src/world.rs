@@ -2,16 +2,14 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::{
     camera::Camera,
-    chunk::{Block, Chunk, CHUNK_ISIZE},
-    geometry::{Geometry, GeometryBuffers},
+    chunk::{Block, BlockType, Chunk, CHUNK_ISIZE},
+    geometry::GeometryBuffers,
     npc::Npc,
     render_context::RenderContext,
-    vertex::BlockVertex,
 };
 use ahash::AHashMap;
-use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use wgpu::BufferUsage;
+use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector2, Vector3};
+use wgpu::{BufferUsage, RenderPass};
 
 pub struct World {
     pub chunks: HashMap<Point3<isize>, Chunk>,
@@ -81,7 +79,9 @@ impl World {
             }
         }
 
-        // Load new chunks, if necessary
+        self.update_highlight(render_context, camera);
+
+        // Queue up new chunks for loading, if necessary
         let camera_pos: Point3<isize> = camera.position.cast().unwrap();
         let camera_chunk: Point3<isize> = camera_pos.map(|n| n.div_euclid(CHUNK_ISIZE));
         let mut load_queue = Vec::new();
@@ -104,6 +104,33 @@ impl World {
         self.chunk_load_queue.extend(load_queue);
     }
 
+    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, camera: &Camera) -> usize {
+        let camera_pos = camera.position.to_vec();
+        let camera_pos = Vector2::new(camera_pos.x, camera_pos.z);
+        let mut triangle_count = 0;
+
+        for (position, buffers) in &self.chunk_buffers {
+            let pos = (position * CHUNK_ISIZE).cast().unwrap();
+            let pos = Vector2::new(pos.x, pos.z);
+            if (pos - camera_pos).magnitude() > 300.0 {
+                continue;
+            }
+
+            buffers.set_buffers(render_pass);
+            buffers.draw_indexed(render_pass);
+            triangle_count += buffers.index_count / 3;
+        }
+
+        {
+            let buffers = self.npc.geometry_buffers.as_ref().unwrap();
+            buffers.set_buffers(render_pass);
+            render_pass.draw_indexed(0..self.npc.indices.len() as u32, 0, 0..1);
+            triangle_count += self.npc.indices.len() / 3;
+        }
+
+        triangle_count
+    }
+
     pub fn update_chunk_geometry(
         &mut self,
         render_context: &RenderContext,
@@ -119,6 +146,53 @@ impl World {
         let buffers =
             GeometryBuffers::from_geometry(render_context, &geometry, BufferUsage::empty());
         self.chunk_buffers.insert(chunk_position, buffers);
+    }
+
+    fn update_highlight(&mut self, render_context: &RenderContext, camera: &Camera) {
+        let old = self.highlighted;
+        let new = self.raycast(camera.position, camera.direction());
+
+        let old_chunk = old.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
+        let new_chunk = new.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
+
+        if old != new {
+            self.highlighted = new;
+
+            if let Some(old_chunk_) = old_chunk {
+                self.update_chunk_geometry(render_context, old_chunk_);
+            }
+
+            if let Some(new_chunk_) = new_chunk {
+                // Don't update the same chunk twice
+                if old_chunk != new_chunk {
+                    self.update_chunk_geometry(render_context, new_chunk_);
+                }
+            }
+        }
+    }
+
+    pub fn break_at_crosshair(&mut self, render_context: &RenderContext, camera: &Camera) {
+        if let Some((pos, _)) = self.raycast(camera.position, camera.direction()) {
+            self.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
+            self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
+        }
+    }
+
+    pub fn place_at_crosshair(&mut self, render_context: &RenderContext, camera: &Camera) {
+        if let Some((pos, face_normal)) = self.raycast(camera.position, camera.direction()) {
+            let new_pos = pos.cast().unwrap() + face_normal;
+
+            self.set_block(
+                new_pos.x as isize,
+                new_pos.y as isize,
+                new_pos.z as isize,
+                Some(Block {
+                    block_type: BlockType::Cobblestone,
+                }),
+            );
+
+            self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
+        }
     }
 
     pub fn highlighted_for_chunk(
@@ -142,29 +216,6 @@ impl World {
         } else {
             None
         }
-    }
-
-    pub fn to_geometry(
-        &self,
-        highlighted: Option<(Point3<isize>, Vector3<i32>)>,
-    ) -> Vec<(Point3<isize>, Geometry<BlockVertex>)> {
-        let instant = std::time::Instant::now();
-
-        let chunks = &self.chunks;
-        let geometry = chunks
-            .par_iter()
-            .map(|(chunk_position, chunk)| {
-                let position = (chunk_position * CHUNK_ISIZE).cast().unwrap();
-                let h = Self::highlighted_for_chunk(highlighted, chunk_position);
-                let geometry = chunk.to_geometry(position, h.as_ref());
-                (*chunk_position, geometry)
-            })
-            .collect();
-
-        let elapsed = instant.elapsed();
-        println!("Generating world geometry took {:?}", elapsed);
-
-        geometry
     }
 
     pub fn get_block(&self, x: isize, y: isize, z: isize) -> Option<&Block> {

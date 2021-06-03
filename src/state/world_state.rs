@@ -1,9 +1,9 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use cgmath::{EuclideanSpace, InnerSpace, Point3, Rad, Vector2, Vector3};
+use cgmath::{InnerSpace, Point3, Rad, Vector3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    BufferUsage, CommandEncoder, SwapChainTexture,
+    CommandEncoder, SwapChainTexture,
 };
 use winit::{
     dpi::PhysicalSize,
@@ -12,8 +12,6 @@ use winit::{
 
 use crate::{
     camera::{Camera, Projection},
-    chunk::{Block, BlockType, CHUNK_ISIZE},
-    geometry::GeometryBuffers,
     render_context::RenderContext,
     texture::{Texture, TextureManager},
     time::Time,
@@ -215,24 +213,6 @@ impl WorldState {
     }
 
     /// TODO Move to World
-    pub fn update_world_geometry(&mut self, render_context: &RenderContext) {
-        let instant = Instant::now();
-
-        let world_geometry = self.world.to_geometry(self.world.highlighted);
-        self.world.chunk_buffers.clear();
-        for (chunk_position, chunk_geometry) in world_geometry {
-            let buffers = GeometryBuffers::from_geometry(
-                render_context,
-                &chunk_geometry,
-                BufferUsage::empty(),
-            );
-            self.world.chunk_buffers.insert(chunk_position, buffers);
-        }
-
-        let elapsed = instant.elapsed();
-        println!("World update took {:?}", elapsed);
-    }
-
     pub fn load_npc_geometry(&mut self, render_context: &RenderContext) {
         self.world.npc.vertex_buffer = Some(render_context.device.create_buffer_init(
             &BufferInitDescriptor {
@@ -326,7 +306,6 @@ impl WorldState {
             creative: true,
         };
 
-        world_state.update_world_geometry(render_context);
         world_state.load_npc_geometry(render_context);
 
         world_state
@@ -367,32 +346,7 @@ impl WorldState {
         render_pass.set_bind_group(1, &self.view_bind_group, &[]);
         render_pass.set_bind_group(2, &self.time_bind_group, &[]);
 
-        let camera_pos = self.camera.position.to_vec();
-        let camera_pos = Vector2::new(camera_pos.x, camera_pos.z);
-
-        // TODO Move to World
-        for (position, buffers) in &self.world.chunk_buffers {
-            let pos = (position * CHUNK_ISIZE).cast().unwrap();
-            let pos = Vector2::new(pos.x, pos.z);
-            if (pos - camera_pos).magnitude() > 300.0 {
-                continue;
-            }
-
-            buffers.set_buffers(&mut render_pass);
-            buffers.draw_indexed(&mut render_pass);
-            triangle_count += buffers.index_count / 3;
-        }
-
-        {
-            let vertex_buffer = self.world.npc.vertex_buffer.as_ref();
-            let index_buffer = self.world.npc.index_buffer.as_ref();
-
-            render_pass.set_vertex_buffer(0, vertex_buffer.unwrap().slice(..));
-            render_pass
-                .set_index_buffer(index_buffer.unwrap().slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw_indexed(0..self.world.npc.indices.len() as u32, 0, 0..1);
-            triangle_count += self.world.npc.indices.len() / 3;
-        }
+        triangle_count += self.world.render(&mut render_pass, &self.camera);
 
         triangle_count
     }
@@ -409,57 +363,11 @@ impl WorldState {
         }
     }
 
-    /// TODO Move to World
-    fn update_aim(&mut self, render_context: &RenderContext) {
-        let camera = &self.camera;
-
-        let old = self.world.highlighted;
-        let new = self.world.raycast(camera.position, camera.direction());
-
-        let old_chunk = old.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
-        let new_chunk = new.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
-
-        if old != new {
-            self.world.highlighted = new;
-
-            if let Some(old_chunk_) = old_chunk {
-                self.world.update_chunk_geometry(render_context, old_chunk_);
-            }
-
-            if let Some(new_chunk_) = new_chunk {
-                // Don't update the same chunk twice
-                if old_chunk != new_chunk {
-                    self.world.update_chunk_geometry(render_context, new_chunk_);
-                }
-            }
-        }
-    }
-
-    /// TODO Move to World
     pub fn input_mouse_button(&mut self, button: &MouseButton, render_context: &RenderContext) {
-        let camera = &self.camera;
-
-        let world = &mut self.world;
-        if let Some((pos, face_normal)) = world.raycast(camera.position, camera.direction()) {
-            if button == &MouseButton::Left {
-                world.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
-                self.world
-                    .update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
-            } else if button == &MouseButton::Right {
-                let new_pos = pos.cast().unwrap() + face_normal;
-
-                world.set_block(
-                    new_pos.x as isize,
-                    new_pos.y as isize,
-                    new_pos.z as isize,
-                    Some(Block {
-                        block_type: BlockType::Cobblestone,
-                    }),
-                );
-
-                self.world
-                    .update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
-            }
+        if button == &MouseButton::Left {
+            self.world.break_at_crosshair(render_context, &self.camera);
+        } else if button == &MouseButton::Right {
+            self.world.place_at_crosshair(render_context, &self.camera);
         }
     }
 
@@ -541,7 +449,6 @@ impl WorldState {
 
     pub fn update(&mut self, dt: Duration, render_context: &RenderContext) {
         self.update_position(dt);
-        self.update_aim(render_context);
 
         self.world.update(render_context, &self.camera);
 

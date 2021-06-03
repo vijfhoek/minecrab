@@ -1,8 +1,4 @@
-use std::{
-    collections::VecDeque,
-    io::{Read, Write},
-    usize,
-};
+use std::{collections::VecDeque, usize};
 
 use crate::{geometry::Geometry, quad::Quad, vertex::BlockVertex};
 use ahash::{AHashMap, AHashSet};
@@ -10,11 +6,10 @@ use cgmath::{Point3, Vector3};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use serde::Serialize;
 use serde::{
     de::{SeqAccess, Visitor},
     ser::{SerializeSeq, Serializer},
-    Deserialize,
+    Deserialize, Serialize,
 };
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
@@ -131,7 +126,7 @@ impl<'de> Deserialize<'de> for Chunk {
 }
 
 impl Chunk {
-    pub fn generate(chunk_x: i32, chunk_y: i32, chunk_z: i32) -> Self {
+    pub fn generate(&mut self, chunk_x: isize, chunk_y: isize, chunk_z: isize) {
         let fbm = noise::Fbm::new();
 
         const TERRAIN_NOISE_SCALE: f64 = 0.1 / 16.0 * CHUNK_SIZE as f64;
@@ -162,42 +157,41 @@ impl Chunk {
             )
             .build();
 
-        let mut blocks: ChunkBlocks = [[[Default::default(); CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
         for z in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 let v = terrain_noise.get_value(x, z) * 20.0 + 128.0;
-                let v = v.round() as i32;
+                let v = v.round() as isize;
 
                 let s = stone_noise.get_value(x, z) * 20.0 + 4.5;
-                let s = (s.round() as i32).min(10).max(3);
+                let s = (s.round() as isize).min(10).max(3);
 
-                let stone_max = (v - s - chunk_y * CHUNK_SIZE as i32).min(CHUNK_SIZE as i32);
+                let stone_max = (v - s - chunk_y * CHUNK_ISIZE).min(CHUNK_ISIZE);
                 for y in 0..stone_max {
-                    blocks[y as usize][z][x] = Some(Block {
+                    self.blocks[y as usize][z][x] = Some(Block {
                         block_type: BlockType::Stone,
                     });
                 }
 
-                let dirt_max = (v - chunk_y * CHUNK_SIZE as i32).min(CHUNK_SIZE as i32);
+                let dirt_max = (v - chunk_y * CHUNK_ISIZE).min(CHUNK_ISIZE);
                 for y in stone_max.max(0)..dirt_max {
-                    blocks[y as usize][z][x] = Some(Block {
+                    self.blocks[y as usize][z][x] = Some(Block {
                         block_type: BlockType::Dirt,
                     });
                 }
 
-                if dirt_max >= 0 && dirt_max < CHUNK_SIZE as i32 {
-                    blocks[dirt_max as usize][z][x] = Some(Block {
+                if dirt_max >= 0 && dirt_max < CHUNK_ISIZE {
+                    self.blocks[dirt_max as usize][z][x] = Some(Block {
                         block_type: BlockType::Grass,
                     });
                 }
 
                 if chunk_y == 0 {
-                    blocks[0][z][x] = Some(Block {
+                    self.blocks[0][z][x] = Some(Block {
                         block_type: BlockType::Bedrock,
                     });
                 }
-                if chunk_y < 128 / CHUNK_SIZE as i32 {
-                    for layer in blocks.iter_mut() {
+                if chunk_y < 128 / CHUNK_ISIZE {
+                    for layer in self.blocks.iter_mut() {
                         if layer[z][x].is_none() {
                             layer[z][x] = Some(Block {
                                 block_type: BlockType::Water,
@@ -207,8 +201,6 @@ impl Chunk {
                 }
             }
         }
-
-        Self { blocks }
     }
 
     #[rustfmt::skip]
@@ -400,26 +392,22 @@ impl Chunk {
         Self::quads_to_geometry(quads)
     }
 
-    pub fn save(&self, position: Point3<isize>) -> anyhow::Result<()> {
+    pub fn save(&self, position: Point3<isize>, store: &sled::Db) -> anyhow::Result<()> {
         let data = rmp_serde::encode::to_vec_named(self)?;
-        let compressed = zstd::block::compress(&data, 0)?;
-
-        let path = format!("chunks/{}_{}_{}.bin", position.x, position.y, position.z);
-        let mut file = std::fs::File::create(&path)?;
-        file.write(&compressed)?;
-
+        let key = format!("{}_{}_{}", position.x, position.y, position.z);
+        store.insert(key, data)?;
         Ok(())
     }
 
-    pub fn load(&mut self, position: Point3<isize>) -> anyhow::Result<()> {
-        let path = format!("chunks/{}_{}_{}.bin", position.x, position.y, position.z);
-        let mut file = std::fs::File::open(&path)?;
+    pub fn load(&mut self, position: Point3<isize>, store: &sled::Db) -> anyhow::Result<bool> {
+        let key = format!("{}_{}_{}", position.x, position.y, position.z);
 
-        let mut compressed = Vec::new();
-        file.read_to_end(&mut compressed)?;
-        let data = zstd::block::decompress(&compressed, 1024 * 1024)?;
-
-        *self = rmp_serde::decode::from_slice(&data)?;
-        Ok(())
+        if let Some(data) = store.get(key)? {
+            *self = rmp_serde::decode::from_slice(&data)?;
+            Ok(false)
+        } else {
+            self.generate(position.x, position.y, position.z);
+            Ok(true)
+        }
     }
 }

@@ -1,9 +1,5 @@
-use std::{
-    collections::VecDeque,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
-use ahash::AHashMap;
 use cgmath::{EuclideanSpace, InnerSpace, Point3, Rad, Vector2, Vector3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -38,15 +34,11 @@ pub struct WorldState {
     pub time_bind_group: wgpu::BindGroup,
     pub world: World,
 
-    pub chunk_buffers: AHashMap<Point3<isize>, GeometryBuffers>,
-    pub chunk_save_queue: VecDeque<Point3<isize>>,
-    pub chunk_load_queue: VecDeque<Point3<isize>>,
     time: Time,
     time_buffer: wgpu::Buffer,
     wireframe: bool,
     shader: wgpu::ShaderModule,
     render_pipeline_layout: wgpu::PipelineLayout,
-    pub highlighted: Option<(Point3<isize>, Vector3<i32>)>,
 
     pub forward_pressed: bool,
     pub backward_pressed: bool,
@@ -222,18 +214,19 @@ impl WorldState {
             })
     }
 
+    /// TODO Move to World
     pub fn update_world_geometry(&mut self, render_context: &RenderContext) {
         let instant = Instant::now();
 
-        let world_geometry = self.world.to_geometry(self.highlighted);
-        self.chunk_buffers.clear();
+        let world_geometry = self.world.to_geometry(self.world.highlighted);
+        self.world.chunk_buffers.clear();
         for (chunk_position, chunk_geometry) in world_geometry {
             let buffers = GeometryBuffers::from_geometry(
                 render_context,
                 &chunk_geometry,
                 BufferUsage::empty(),
             );
-            self.chunk_buffers.insert(chunk_position, buffers);
+            self.world.chunk_buffers.insert(chunk_position, buffers);
         }
 
         let elapsed = instant.elapsed();
@@ -258,23 +251,6 @@ impl WorldState {
         ));
     }
 
-    pub fn update_chunk_geometry(
-        &mut self,
-        render_context: &RenderContext,
-        chunk_position: Point3<isize>,
-    ) {
-        let chunk = &mut self.world.chunks.get(&chunk_position).unwrap();
-        let offset = chunk_position * CHUNK_ISIZE;
-        let geometry = chunk.to_geometry(
-            offset,
-            World::highlighted_for_chunk(self.highlighted, &chunk_position).as_ref(),
-        );
-
-        let buffers =
-            GeometryBuffers::from_geometry(render_context, &geometry, BufferUsage::empty());
-        self.chunk_buffers.insert(chunk_position, buffers);
-    }
-
     pub fn toggle_wireframe(&mut self, render_context: &RenderContext) {
         self.wireframe = !self.wireframe;
         self.render_pipeline = Self::create_render_pipeline(
@@ -286,8 +262,6 @@ impl WorldState {
     }
 
     pub fn new(render_context: &RenderContext) -> WorldState {
-        let world = World::generate();
-
         let texture_manager = Self::create_textures(render_context);
 
         let (camera, projection) = Self::create_camera(render_context);
@@ -296,6 +270,8 @@ impl WorldState {
             Self::create_view(&camera, &projection, render_context);
 
         let (time, time_buffer, time_layout, time_bind_group) = Self::create_time(render_context);
+
+        let world = World::new();
 
         let shader = render_context.device.create_shader_module(
             &(wgpu::ShaderModuleDescriptor {
@@ -317,10 +293,8 @@ impl WorldState {
                         &time_layout,
                     ],
                 });
-
         let render_pipeline =
             Self::create_render_pipeline(&render_context, &shader, &render_pipeline_layout, false);
-
         let depth_texture = Texture::create_depth_texture(render_context, "depth_texture");
 
         let mut world_state = Self {
@@ -340,11 +314,8 @@ impl WorldState {
             time_bind_group,
 
             world,
-            chunk_buffers: AHashMap::new(),
-            chunk_load_queue: VecDeque::new(),
-            chunk_save_queue: VecDeque::new(),
+
             wireframe: false,
-            highlighted: None,
 
             up_speed: 0.0,
             sprinting: false,
@@ -352,7 +323,7 @@ impl WorldState {
             backward_pressed: false,
             left_pressed: false,
             right_pressed: false,
-            creative: false,
+            creative: true,
         };
 
         world_state.update_world_geometry(render_context);
@@ -399,7 +370,8 @@ impl WorldState {
         let camera_pos = self.camera.position.to_vec();
         let camera_pos = Vector2::new(camera_pos.x, camera_pos.z);
 
-        for (position, buffers) in &self.chunk_buffers {
+        // TODO Move to World
+        for (position, buffers) in &self.world.chunk_buffers {
             let pos = (position * CHUNK_ISIZE).cast().unwrap();
             let pos = Vector2::new(pos.x, pos.z);
             if (pos - camera_pos).magnitude() > 300.0 {
@@ -419,6 +391,7 @@ impl WorldState {
             render_pass
                 .set_index_buffer(index_buffer.unwrap().slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..self.world.npc.indices.len() as u32, 0, 0..1);
+            triangle_count += self.world.npc.indices.len() / 3;
         }
 
         triangle_count
@@ -436,31 +409,33 @@ impl WorldState {
         }
     }
 
+    /// TODO Move to World
     fn update_aim(&mut self, render_context: &RenderContext) {
         let camera = &self.camera;
 
-        let old = self.highlighted;
+        let old = self.world.highlighted;
         let new = self.world.raycast(camera.position, camera.direction());
 
         let old_chunk = old.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
         let new_chunk = new.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
 
         if old != new {
-            self.highlighted = new;
+            self.world.highlighted = new;
 
             if let Some(old_chunk_) = old_chunk {
-                self.update_chunk_geometry(render_context, old_chunk_);
+                self.world.update_chunk_geometry(render_context, old_chunk_);
             }
 
             if let Some(new_chunk_) = new_chunk {
                 // Don't update the same chunk twice
                 if old_chunk != new_chunk {
-                    self.update_chunk_geometry(render_context, new_chunk_);
+                    self.world.update_chunk_geometry(render_context, new_chunk_);
                 }
             }
         }
     }
 
+    /// TODO Move to World
     pub fn input_mouse_button(&mut self, button: &MouseButton, render_context: &RenderContext) {
         let camera = &self.camera;
 
@@ -468,7 +443,8 @@ impl WorldState {
         if let Some((pos, face_normal)) = world.raycast(camera.position, camera.direction()) {
             if button == &MouseButton::Left {
                 world.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
-                self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
+                self.world
+                    .update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
             } else if button == &MouseButton::Right {
                 let new_pos = pos.cast().unwrap() + face_normal;
 
@@ -481,7 +457,8 @@ impl WorldState {
                     }),
                 );
 
-                self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
+                self.world
+                    .update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
             }
         }
     }
@@ -494,8 +471,6 @@ impl WorldState {
             VirtualKeyCode::A => self.left_pressed = pressed,
             VirtualKeyCode::D => self.right_pressed = pressed,
             VirtualKeyCode::F2 if pressed => self.creative = !self.creative,
-            VirtualKeyCode::F3 if pressed => self.chunk_save_queue.extend(self.world.chunks.keys()),
-            VirtualKeyCode::F4 if pressed => self.chunk_load_queue.extend(self.world.chunks.keys()),
             VirtualKeyCode::Space => {
                 self.up_speed = if pressed {
                     if self.creative {
@@ -565,25 +540,10 @@ impl WorldState {
     }
 
     pub fn update(&mut self, dt: Duration, render_context: &RenderContext) {
-        if let Some(position) = self.chunk_load_queue.pop_front() {
-            let chunk = self.world.chunks.entry(position).or_default();
-            if let Err(err) = chunk.load(position) {
-                eprintln!("Failed to load chunk {:?}: {:?}", position, err);
-            } else {
-                self.update_chunk_geometry(render_context, position);
-                println!("Loaded chunk {:?}", position);
-            }
-        } else if let Some(position) = self.chunk_save_queue.pop_front() {
-            let chunk = self.world.chunks.get(&position).unwrap();
-            if let Err(err) = chunk.save(position) {
-                eprintln!("Failed to save chunk {:?}: {:?}", position, err);
-            } else {
-                println!("Saved chunk {:?}", position);
-            }
-        }
-
         self.update_position(dt);
         self.update_aim(render_context);
+
+        self.world.update(render_context, &self.camera);
 
         self.view
             .update_view_projection(&self.camera, &self.projection);

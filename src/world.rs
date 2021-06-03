@@ -1,45 +1,124 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    chunk::{Block, Chunk, CHUNK_ISIZE, CHUNK_SIZE},
-    geometry::Geometry,
+    camera::Camera,
+    chunk::{Block, Chunk, CHUNK_ISIZE},
+    geometry::{Geometry, GeometryBuffers},
     npc::Npc,
+    render_context::RenderContext,
     vertex::BlockVertex,
 };
+use ahash::AHashMap;
 use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3};
-use rayon::prelude::*;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use wgpu::BufferUsage;
 
 pub struct World {
     pub chunks: HashMap<Point3<isize>, Chunk>,
     pub npc: Npc,
+
+    pub chunk_database: sled::Db,
+    pub chunk_save_queue: VecDeque<Point3<isize>>,
+    pub chunk_load_queue: VecDeque<Point3<isize>>,
+    pub chunk_generate_queue: VecDeque<Point3<isize>>,
+    pub chunk_buffers: AHashMap<Point3<isize>, GeometryBuffers>,
+
+    pub highlighted: Option<(Point3<isize>, Vector3<i32>)>,
 }
 
-const WORLD_SIZE: Vector3<usize> = Vector3::new(
-    8 * 16 / CHUNK_SIZE,
-    16 * 16 / CHUNK_SIZE,
-    8 * 16 / CHUNK_SIZE,
-);
+pub const RENDER_DISTANCE: isize = 8;
+pub const WORLD_HEIGHT: isize = 16 * 16 / CHUNK_ISIZE;
 
 impl World {
-    pub fn generate() -> Self {
+    pub fn new() -> Self {
+        let chunks = HashMap::new();
         let npc = Npc::load();
-        let half: Vector3<isize> = WORLD_SIZE.cast().unwrap() / 2;
 
-        let coords: Vec<_> =
-            itertools::iproduct!(-half.x..half.x, 0..WORLD_SIZE.y as isize, -half.z..half.z)
-                .collect();
+        let chunk_database = sled::Config::new()
+            .path("chunks")
+            .mode(sled::Mode::HighThroughput)
+            .use_compression(true)
+            .open()
+            .unwrap();
 
-        let chunks: HashMap<_, _> = coords
-            .par_iter()
-            .map(|&(x, y, z)| {
-                (
-                    Point3::new(x, y, z),
-                    Chunk::generate(x as i32, y as i32, z as i32),
-                )
-            })
-            .collect();
+        Self {
+            chunks,
+            npc,
 
-        Self { chunks, npc }
+            chunk_database,
+            chunk_load_queue: VecDeque::new(),
+            chunk_save_queue: VecDeque::new(),
+            chunk_generate_queue: VecDeque::new(),
+            chunk_buffers: AHashMap::new(),
+
+            highlighted: None,
+        }
+    }
+
+    pub fn update(&mut self, render_context: &RenderContext, camera: &Camera) {
+        if let Some(position) = self.chunk_load_queue.pop_front() {
+            let chunk = self.chunks.entry(position).or_default();
+            match chunk.load(position, &self.chunk_database) {
+                Err(error) => {
+                    eprintln!("Failed to load/generate chunk {:?}: {:?}", position, error)
+                }
+                Ok(true) => {
+                    self.update_chunk_geometry(render_context, position);
+                    self.chunk_save_queue.push_back(position);
+                    // println!("Generated chunk {:?}", position);
+                }
+                Ok(false) => {
+                    self.update_chunk_geometry(render_context, position);
+                    // println!("Loaded chunk {:?}", position);
+                }
+            }
+        } else if let Some(position) = self.chunk_save_queue.pop_front() {
+            let chunk = self.chunks.get(&position).unwrap();
+            if let Err(err) = chunk.save(position, &self.chunk_database) {
+                eprintln!("Failed to save chunk {:?}: {:?}", position, err);
+            } else {
+                // println!("Saved chunk {:?}", position);
+            }
+        }
+
+        // Load new chunks, if necessary
+        let camera_pos: Point3<isize> = camera.position.cast().unwrap();
+        let camera_chunk: Point3<isize> = camera_pos.map(|n| n.div_euclid(CHUNK_ISIZE));
+        let mut load_queue = Vec::new();
+        for (x, y, z) in itertools::iproduct!(
+            -RENDER_DISTANCE..RENDER_DISTANCE,
+            0..WORLD_HEIGHT,
+            -RENDER_DISTANCE..RENDER_DISTANCE
+        ) {
+            let point: Point3<isize> = Point3::new(x + camera_chunk.x, y, z + camera_chunk.z);
+            if !self.chunks.contains_key(&point) && !self.chunk_load_queue.contains(&point) {
+                load_queue.push(point);
+            }
+        }
+
+        // TODO Sort based on where camera is looking
+        load_queue.sort_unstable_by_key(|f| {
+            (f.x * CHUNK_ISIZE - camera_pos.x).abs() + (f.y * CHUNK_ISIZE - camera_pos.y).abs()
+        });
+
+        self.chunk_load_queue.extend(load_queue);
+    }
+
+    pub fn update_chunk_geometry(
+        &mut self,
+        render_context: &RenderContext,
+        chunk_position: Point3<isize>,
+    ) {
+        let chunk = &mut self.chunks.get(&chunk_position).unwrap();
+        let offset = chunk_position * CHUNK_ISIZE;
+        let geometry = chunk.to_geometry(
+            offset,
+            World::highlighted_for_chunk(self.highlighted, &chunk_position).as_ref(),
+        );
+
+        let buffers =
+            GeometryBuffers::from_geometry(render_context, &geometry, BufferUsage::empty());
+        self.chunk_buffers.insert(chunk_position, buffers);
     }
 
     pub fn highlighted_for_chunk(
@@ -105,16 +184,21 @@ impl World {
     }
 
     pub fn set_block(&mut self, x: isize, y: isize, z: isize, block: Option<Block>) {
-        if let Some(chunk) = self.chunks.get_mut(&Point3::new(
+        let chunk_position = Point3::new(
             x.div_euclid(CHUNK_ISIZE),
             y.div_euclid(CHUNK_ISIZE),
             z.div_euclid(CHUNK_ISIZE),
-        )) {
+        );
+
+        if let Some(chunk) = self.chunks.get_mut(&chunk_position) {
             let bx = x.rem_euclid(CHUNK_ISIZE) as usize;
             let by = y.rem_euclid(CHUNK_ISIZE) as usize;
             let bz = z.rem_euclid(CHUNK_ISIZE) as usize;
             chunk.blocks[by][bz][bx] = block;
         }
+
+        self.chunk_save_queue
+            .push_back(chunk_position / CHUNK_ISIZE);
     }
 
     fn calc_scale(vector: Vector3<f32>, scalar: f32) -> f32 {

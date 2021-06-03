@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::{collections::VecDeque, time::Duration};
 
 use crate::{
     camera::Camera,
@@ -6,30 +6,34 @@ use crate::{
     geometry::GeometryBuffers,
     npc::Npc,
     render_context::RenderContext,
+    view::View,
 };
 use ahash::AHashMap;
-use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector2, Vector3};
+use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3};
 use wgpu::{BufferUsage, RenderPass};
 
 pub struct World {
-    pub chunks: HashMap<Point3<isize>, Chunk>,
     pub npc: Npc,
 
+    pub chunks: AHashMap<Point3<isize>, Chunk>,
     pub chunk_database: sled::Db,
-    pub chunk_save_queue: VecDeque<Point3<isize>>,
+    pub chunk_save_queue: VecDeque<(Point3<isize>, bool)>,
     pub chunk_load_queue: VecDeque<Point3<isize>>,
     pub chunk_generate_queue: VecDeque<Point3<isize>>,
-    pub chunk_buffers: AHashMap<Point3<isize>, GeometryBuffers<u16>>,
 
     pub highlighted: Option<(Point3<isize>, Vector3<i32>)>,
+
+    pub unload_timer: Duration,
 }
 
 pub const RENDER_DISTANCE: isize = 8;
 pub const WORLD_HEIGHT: isize = 16 * 16 / CHUNK_ISIZE;
 
+const DEBUG_IO: bool = false;
+
 impl World {
     pub fn new() -> Self {
-        let chunks = HashMap::new();
+        let chunks = AHashMap::new();
         let npc = Npc::load();
 
         let chunk_database = sled::Config::new()
@@ -47,13 +51,14 @@ impl World {
             chunk_load_queue: VecDeque::new(),
             chunk_save_queue: VecDeque::new(),
             chunk_generate_queue: VecDeque::new(),
-            chunk_buffers: AHashMap::new(),
 
             highlighted: None,
+
+            unload_timer: Duration::new(0, 0),
         }
     }
 
-    pub fn update(&mut self, render_context: &RenderContext, camera: &Camera) {
+    pub fn update(&mut self, dt: Duration, render_context: &RenderContext, camera: &Camera) {
         if let Some(position) = self.chunk_load_queue.pop_front() {
             let chunk = self.chunks.entry(position).or_default();
             match chunk.load(position, &self.chunk_database) {
@@ -62,20 +67,33 @@ impl World {
                 }
                 Ok(true) => {
                     self.update_chunk_geometry(render_context, position);
-                    self.chunk_save_queue.push_back(position);
-                    // println!("Generated chunk {:?}", position);
+                    self.enqueue_chunk_save(position, false);
+                    if DEBUG_IO {
+                        println!("Generated chunk {:?}", position);
+                    }
                 }
                 Ok(false) => {
                     self.update_chunk_geometry(render_context, position);
-                    // println!("Loaded chunk {:?}", position);
+                    if DEBUG_IO {
+                        println!("Loaded chunk {:?}", position);
+                    }
                 }
             }
-        } else if let Some(position) = self.chunk_save_queue.pop_front() {
-            let chunk = self.chunks.get(&position).unwrap();
-            if let Err(err) = chunk.save(position, &self.chunk_database) {
-                eprintln!("Failed to save chunk {:?}: {:?}", position, err);
+        } else if let Some((position, unload)) = self.chunk_save_queue.pop_front() {
+            if let Some(chunk) = self.chunks.get(&position) {
+                if let Err(err) = chunk.save(position, &self.chunk_database) {
+                    eprintln!("Failed to save chunk {:?}: {:?}", position, err);
+                } else if unload {
+                    self.chunks.remove(&position);
+
+                    if DEBUG_IO {
+                        println!("Saved and unloaded chunk {:?}", position);
+                    }
+                } else if DEBUG_IO {
+                    println!("Saved chunk {:?}", position);
+                }
             } else {
-                // println!("Saved chunk {:?}", position);
+                eprintln!("Tried to save unloaded chunk {:?}", position);
             }
         }
 
@@ -102,22 +120,42 @@ impl World {
         });
 
         self.chunk_load_queue.extend(load_queue);
+
+        // Unload chunks that are far away
+        self.unload_timer += dt;
+        if self.unload_timer.as_secs() >= 10 {
+            self.unload_timer = Duration::new(0, 0);
+
+            let camera_pos = camera.position.to_vec();
+            let unload_distance = (RENDER_DISTANCE * CHUNK_ISIZE) as f32 * 1.5;
+
+            let mut unload_chunks = Vec::new();
+            for point in self.chunks.keys() {
+                let pos: Point3<f32> = (point * CHUNK_ISIZE).cast().unwrap();
+                if (pos.x - camera_pos.x).abs() > unload_distance
+                    || (pos.z - camera_pos.z).abs() > unload_distance
+                {
+                    unload_chunks.push(*point);
+                }
+            }
+            for point in unload_chunks {
+                self.enqueue_chunk_save(point, true);
+            }
+        }
     }
 
-    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, camera: &Camera) -> usize {
-        let camera_pos = camera.position.to_vec();
-        let camera_pos = Vector2::new(camera_pos.x, camera_pos.z);
+    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, view: &View) -> usize {
         let mut triangle_count = 0;
 
-        for (position, buffers) in &self.chunk_buffers {
-            let pos = (position * CHUNK_ISIZE).cast().unwrap();
-            let pos = Vector2::new(pos.x, pos.z);
-            if (pos - camera_pos).magnitude() > 300.0 {
+        for (position, chunk) in &self.chunks {
+            if !chunk.is_visible(position * CHUNK_ISIZE, &view) {
                 continue;
             }
 
-            buffers.set_buffers(render_pass);
-            triangle_count += buffers.draw_indexed(render_pass);
+            if let Some(buffers) = chunk.buffers.as_ref() {
+                buffers.apply_buffers(render_pass);
+                triangle_count += buffers.draw_indexed(render_pass);
+            }
         }
 
         {
@@ -129,21 +167,35 @@ impl World {
         triangle_count
     }
 
+    pub fn enqueue_chunk_save(&mut self, position: Point3<isize>, unload: bool) {
+        if let Some((_, unload_)) = self
+            .chunk_save_queue
+            .iter_mut()
+            .find(|(pos, _)| pos == &position)
+        {
+            *unload_ = *unload_ || unload;
+        } else {
+            self.chunk_save_queue.push_back((position, unload));
+        }
+    }
+
     pub fn update_chunk_geometry(
         &mut self,
         render_context: &RenderContext,
         chunk_position: Point3<isize>,
     ) {
-        let chunk = &mut self.chunks.get(&chunk_position).unwrap();
+        let chunk = self.chunks.get_mut(&chunk_position).unwrap();
         let offset = chunk_position * CHUNK_ISIZE;
         let geometry = chunk.to_geometry(
             offset,
             World::highlighted_for_chunk(self.highlighted, &chunk_position).as_ref(),
         );
 
-        let buffers =
-            GeometryBuffers::from_geometry(render_context, &geometry, BufferUsage::empty());
-        self.chunk_buffers.insert(chunk_position, buffers);
+        chunk.buffers = Some(GeometryBuffers::from_geometry(
+            render_context,
+            &geometry,
+            BufferUsage::empty(),
+        ));
     }
 
     fn update_highlight(&mut self, render_context: &RenderContext, camera: &Camera) {
@@ -247,7 +299,7 @@ impl World {
         }
 
         self.chunk_save_queue
-            .push_back(chunk_position / CHUNK_ISIZE);
+            .push_back((chunk_position / CHUNK_ISIZE, false));
     }
 
     fn calc_scale(vector: Vector3<f32>, scalar: f32) -> f32 {

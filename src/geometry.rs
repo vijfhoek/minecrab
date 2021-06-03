@@ -77,7 +77,7 @@ impl<I: bytemuck::Pod> GeometryBuffers<I> {
 }
 
 impl GeometryBuffers<u16> {
-    pub fn set_buffers<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
+    pub fn apply_buffers<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
         render_pass.set_vertex_buffer(0, self.vertices.slice(..));
         render_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);
     }

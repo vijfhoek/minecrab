@@ -28,7 +28,7 @@ pub const PRIMITIVE_STATE: wgpu::PrimitiveState = wgpu::PrimitiveState {
 pub struct State {
     pub window_size: PhysicalSize<u32>,
     render_context: RenderContext,
-    world_state: WorldState,
+    pub world_state: WorldState,
     hud_state: HudState,
 
     pub mouse_grabbed: bool,

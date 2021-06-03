@@ -4,5 +4,6 @@
 /perf.data*
 /chunks/
 
+GPUCache/
 profile.txt
 callgrind.out.*

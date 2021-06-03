@@ -1,7 +1,5 @@
 use cgmath::{Matrix4, Point3, Rad, Vector3};
 
-use crate::aabb::Aabb;
-
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
@@ -9,11 +7,6 @@ pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
     0.0, 0.0, 0.5, 0.0,
     0.0, 0.0, 0.5, 1.0,
 );
-
-const AABB: Aabb<f32> = Aabb {
-    min: Vector3::new(-0.3, 1.62, -0.3),
-    max: Vector3::new(0.3, 1.8 - 1.62, 0.3),
-};
 
 pub struct Camera {
     pub position: Point3<f32>,

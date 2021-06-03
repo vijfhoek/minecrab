@@ -55,13 +55,13 @@ impl Npc {
             }
         }
 
-        return Self {
+        Self {
             position,
             scale,
             rotation,
             geometry: Geometry::new(vertices, indices),
             geometry_buffers: None,
-        };
+        }
     }
 
     pub fn load_geometry(&mut self, render_context: &RenderContext) {

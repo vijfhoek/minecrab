@@ -1,6 +1,12 @@
 use std::{collections::VecDeque, usize};
 
-use crate::{geometry::Geometry, quad::Quad, vertex::BlockVertex};
+use crate::{
+    aabb::Aabb,
+    geometry::{Geometry, GeometryBuffers},
+    quad::Quad,
+    vertex::BlockVertex,
+    view::View,
+};
 use ahash::{AHashMap, AHashSet};
 use cgmath::{Point3, Vector3};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
@@ -68,9 +74,18 @@ pub const CHUNK_ISIZE: isize = CHUNK_SIZE as isize;
 
 type ChunkBlocks = [[[Option<Block>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
 
-#[derive(Clone, Default)]
 pub struct Chunk {
     pub blocks: ChunkBlocks,
+    pub buffers: Option<GeometryBuffers<u16>>,
+}
+
+impl Default for Chunk {
+    fn default() -> Self {
+        Self {
+            blocks: [[[None; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
+            buffers: None,
+        }
+    }
 }
 
 impl Serialize for Chunk {
@@ -179,7 +194,7 @@ impl Chunk {
                     });
                 }
 
-                if dirt_max >= 0 && dirt_max < CHUNK_ISIZE {
+                if (0..CHUNK_ISIZE).contains(&dirt_max) {
                     self.blocks[dirt_max as usize][z][x] = Some(Block {
                         block_type: BlockType::Grass,
                     });
@@ -409,5 +424,16 @@ impl Chunk {
             self.generate(position.x, position.y, position.z);
             Ok(true)
         }
+    }
+
+    pub fn is_visible(&self, position: Point3<isize>, view: &View) -> bool {
+        let aabb = Aabb {
+            min: position.cast().unwrap(),
+            max: (position + Vector3::new(CHUNK_ISIZE, CHUNK_ISIZE, CHUNK_ISIZE))
+                .cast()
+                .unwrap(),
+        };
+
+        aabb.intersects(&view.aabb)
     }
 }

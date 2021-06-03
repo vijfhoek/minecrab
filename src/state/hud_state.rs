@@ -124,19 +124,19 @@ impl HudState {
         render_pass.set_pipeline(&self.render_pipeline);
 
         // Render the HUD elements
-        self.hud_geometry_buffers.set_buffers(&mut render_pass);
+        self.hud_geometry_buffers.apply_buffers(&mut render_pass);
         render_pass.set_bind_group(0, &self.texture_bind_group, &[]);
         self.hud_geometry_buffers.draw_indexed(&mut render_pass);
         render_pass.draw_indexed(0..self.hud_geometry_buffers.index_count as u32, 0, 0..1);
 
         // Render the FPS text
-        self.fps_geometry_buffers.set_buffers(&mut render_pass);
+        self.fps_geometry_buffers.apply_buffers(&mut render_pass);
         render_pass.set_bind_group(0, &self.text_renderer.bind_group, &[]);
         self.fps_geometry_buffers.draw_indexed(&mut render_pass);
 
         // Render the coordinates text
         self.coordinates_geometry_buffers
-            .set_buffers(&mut render_pass);
+            .apply_buffers(&mut render_pass);
         render_pass.set_bind_group(0, &self.text_renderer.bind_group, &[]);
         self.coordinates_geometry_buffers
             .draw_indexed(&mut render_pass);

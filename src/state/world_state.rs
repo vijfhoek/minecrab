@@ -67,7 +67,7 @@ impl WorldState {
             render_context.swap_chain_descriptor.height,
             cgmath::Deg(45.0),
             0.1,
-            5000.0,
+            300.0,
         );
 
         (camera, projection)
@@ -85,7 +85,7 @@ impl WorldState {
             .device
             .create_buffer_init(&BufferInitDescriptor {
                 label: Some("view_buffer"),
-                contents: bytemuck::cast_slice(&[view]),
+                contents: bytemuck::cast_slice(&[view.to_raw()]),
                 usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             });
 
@@ -324,7 +324,7 @@ impl WorldState {
         render_pass.set_bind_group(1, &self.view_bind_group, &[]);
         render_pass.set_bind_group(2, &self.time_bind_group, &[]);
 
-        triangle_count += self.world.render(&mut render_pass, &self.camera);
+        triangle_count += self.world.render(&mut render_pass, &self.view);
 
         triangle_count
     }
@@ -428,13 +428,15 @@ impl WorldState {
     pub fn update(&mut self, dt: Duration, render_context: &RenderContext) {
         self.update_position(dt);
 
-        self.world.update(render_context, &self.camera);
+        self.world.update(dt, render_context, &self.camera);
 
         self.view
             .update_view_projection(&self.camera, &self.projection);
-        render_context
-            .queue
-            .write_buffer(&self.view_buffer, 0, bytemuck::cast_slice(&[self.view]));
+        render_context.queue.write_buffer(
+            &self.view_buffer,
+            0,
+            bytemuck::cast_slice(&[self.view.to_raw()]),
+        );
 
         self.time.time += dt.as_secs_f32();
         render_context.queue.write_buffer(

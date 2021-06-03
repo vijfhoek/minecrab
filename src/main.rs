@@ -2,6 +2,7 @@ mod aabb;
 mod camera;
 mod chunk;
 mod geometry;
+mod npc;
 mod quad;
 mod render_context;
 mod state;
@@ -11,7 +12,6 @@ mod time;
 mod vertex;
 mod view;
 mod world;
-mod npc;
 
 use std::time::{Duration, Instant};
 use wgpu::SwapChainError;
@@ -133,9 +133,21 @@ fn main() {
                     let fps_max = 1_000_000 / frametime_min.as_micros();
                     let fps_min = 1_000_000 / frametime_max.as_micros();
 
+                    print!("{:>4} frames | ", frames);
+                    print!(
+                        "frametime avg={:>5.2}ms min={:>5.2}ms max={:>5.2}ms | ",
+                        frametime.as_secs_f32() * 1000.0,
+                        frametime_min.as_secs_f32() * 1000.0,
+                        frametime_max.as_secs_f32() * 1000.0,
+                    );
+                    print!(
+                        "fps avg={:>5} min={:>5} max={:>5} | ",
+                        fps, fps_min, fps_max
+                    );
                     println!(
-                        "{:>4} frames | frametime avg={:>5.2}ms min={:>5.2}ms max={:>5.2}ms | fps avg={:>5} min={:>5} max={:>5} | {:>8} tris",
-                        frames, frametime.as_secs_f32() * 1000.0, frametime_min.as_secs_f32() * 1000.0, frametime_max.as_secs_f32() * 1000.0, fps, fps_min, fps_max, triangle_count,
+                        "{:>8} tris | {:>5} chunks",
+                        triangle_count,
+                        state.world_state.world.chunks.len()
                     );
 
                     elapsed = Duration::from_secs(0);
@@ -150,17 +162,18 @@ fn main() {
                 state.update(dt);
 
                 match state.render() {
-                    Err(root_cause) =>
-                        match root_cause.downcast_ref::<SwapChainError>() {
-                            // Recreate the swap_chain if lost
-                            Some(wgpu::SwapChainError::Lost) => state.resize(state.window_size),
-                            // The system is out of memory, we should probably quit
-                            Some(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                            // All other errors (Outdated, Timeout) should be resolved by the next frame
-                            Some(_) | None => eprintln!("{:?}", root_cause),
+                    Err(root_cause) => match root_cause.downcast_ref::<SwapChainError>() {
+                        // Recreate the swap_chain if lost
+                        Some(wgpu::SwapChainError::Lost) => state.resize(state.window_size),
+                        // The system is out of memory, we should probably quit
+                        Some(wgpu::SwapChainError::OutOfMemory) => {
+                            *control_flow = ControlFlow::Exit
                         }
+                        // All other errors (Outdated, Timeout) should be resolved by the next frame
+                        Some(_) | None => eprintln!("{:?}", root_cause),
+                    },
 
-                    Ok(v) => triangle_count = v
+                    Ok(v) => triangle_count = v,
                 }
             }
             Event::MainEventsCleared => {

@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::{
     aabb::Aabb,
     geometry::{Geometry, GeometryBuffers},
+    render_context::RenderContext,
     vertex::BlockVertex,
     view::View,
     world::{
@@ -20,6 +21,7 @@ use serde::{
     ser::SerializeSeq,
     Deserialize, Serialize, Serializer,
 };
+use wgpu::BufferUsage;
 
 pub const CHUNK_SIZE: usize = 32;
 pub const CHUNK_ISIZE: isize = CHUNK_SIZE as isize;
@@ -168,6 +170,22 @@ impl Chunk {
         }
     }
 
+    pub fn block_coords_to_local(
+        chunk_coords: Point3<isize>,
+        block_coords: Point3<isize>,
+    ) -> Option<Vector3<usize>> {
+        let chunk_position = chunk_coords * CHUNK_ISIZE;
+        let position = block_coords - chunk_position;
+        if (0..CHUNK_ISIZE).contains(&position.x)
+            && (0..CHUNK_ISIZE).contains(&position.y)
+            && (0..CHUNK_ISIZE).contains(&position.z)
+        {
+            Some(position.cast().unwrap())
+        } else {
+            None
+        }
+    }
+
     #[rustfmt::skip]
     fn check_visible_faces(&self, x: usize, y: usize, z: usize) -> FaceFlags {
         let mut visible_faces = FACE_NONE;
@@ -244,7 +262,7 @@ impl Chunk {
         offset: Point3<isize>,
         culled: AHashMap<(usize, usize), (BlockType, FaceFlags)>,
         queue: &mut VecDeque<(usize, usize)>,
-        highlighted: Option<&(Point3<usize>, Vector3<i32>)>,
+        highlighted: Option<(Vector3<usize>, Vector3<i32>)>,
     ) -> Vec<Quad> {
         let mut quads: Vec<Quad> = Vec::new();
         let mut visited = AHashSet::new();
@@ -260,7 +278,7 @@ impl Chunk {
             if let Some(&(block_type, visible_faces)) = &culled.get(&(x, z)) {
                 let mut quad_faces = visible_faces;
 
-                if hl == Some(Point3::new(x, y, z)) {
+                if hl == Some(Vector3::new(x, y, z)) {
                     let mut quad = Quad::new(position, 1, 1);
                     quad.highlighted_normal = highlighted.unwrap().1;
                     quad.visible_faces = quad_faces;
@@ -282,7 +300,7 @@ impl Chunk {
                 for x_ in x..CHUNK_SIZE {
                     xmax = x_ + 1;
 
-                    if visited.contains(&(xmax, z)) || hl == Some(Point3::new(xmax, y, z)) {
+                    if visited.contains(&(xmax, z)) || hl == Some(Vector3::new(xmax, y, z)) {
                         break;
                     }
 
@@ -304,7 +322,7 @@ impl Chunk {
                     zmax = z_ + 1;
 
                     for x_ in x..xmax {
-                        if visited.contains(&(x_, zmax)) || hl == Some(Point3::new(x_, y, zmax)) {
+                        if visited.contains(&(x_, zmax)) || hl == Some(Vector3::new(x_, y, zmax)) {
                             break 'z;
                         }
 
@@ -341,20 +359,30 @@ impl Chunk {
         geometry
     }
 
-    pub fn to_geometry(
-        &self,
-        position: Point3<isize>,
-        highlighted: Option<&(Point3<usize>, Vector3<i32>)>,
-    ) -> Geometry<BlockVertex, u16> {
+    pub fn update_geometry(
+        &mut self,
+        render_context: &RenderContext,
+        chunk_coords: Point3<isize>,
+        highlighted: Option<(Point3<isize>, Vector3<i32>)>,
+    ) {
+        let highlighted = highlighted.and_then(|(position, normal)| {
+            Self::block_coords_to_local(chunk_coords, position).map(|x| (x, normal))
+        });
+
+        let offset = chunk_coords * CHUNK_ISIZE;
         let quads: Vec<Quad> = (0..CHUNK_SIZE)
             .into_par_iter()
             .flat_map(|y| {
                 let (culled, mut queue) = self.cull_layer(y);
-                self.layer_to_quads(y, position, culled, &mut queue, highlighted)
+                self.layer_to_quads(y, offset, culled, &mut queue, highlighted)
             })
             .collect();
 
-        Self::quads_to_geometry(quads)
+        self.buffers = Some(GeometryBuffers::from_geometry(
+            render_context,
+            &Self::quads_to_geometry(quads),
+            BufferUsage::empty(),
+        ));
     }
 
     pub fn save(&self, position: Point3<isize>, store: &sled::Db) -> anyhow::Result<()> {

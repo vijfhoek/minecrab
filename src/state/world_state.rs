@@ -18,7 +18,7 @@ use crate::{
     time::Time,
     vertex::{BlockVertex, Vertex},
     view::View,
-    world::world::World,
+    world::World,
 };
 
 pub struct WorldState {

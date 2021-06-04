@@ -66,11 +66,11 @@ impl Quad {
         let mut current_index = start_index;
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
-        let highlighted: [f32; 3] = self.highlighted_normal.cast().unwrap().into();
 
         if self.visible_faces & FACE_LEFT == FACE_LEFT {
-            let normal = [-1.0,  0.0,  0.0];
-            let highlighted = (normal == highlighted) as i32;
+            let normal = Vector3::new(-1,  0,  0);
+            let highlighted = (self.highlighted_normal == normal) as i32;
+            let normal = normal.cast().unwrap().into();
             vertices.extend(&[
                 BlockVertex { position: [x, y,      z     ], texture_coordinates: [dz,  1.0], texture_id: t.0 as i32, normal, highlighted },
                 BlockVertex { position: [x, y,      z + dz], texture_coordinates: [0.0, 1.0], texture_id: t.0 as i32, normal, highlighted },
@@ -85,8 +85,9 @@ impl Quad {
         }
 
         if self.visible_faces & FACE_RIGHT == FACE_RIGHT {
-            let normal = [1.0, 0.0, 0.0];
-            let highlighted = (normal == highlighted) as i32;
+            let normal = Vector3::new(1, 0, 0);
+            let highlighted = (self.highlighted_normal == normal) as i32;
+            let normal = normal.cast().unwrap().into();
             vertices.extend(&[
                 BlockVertex { position: [x + dx, y,      z     ], texture_coordinates: [0.0, 1.0], texture_id: t.1 as i32, normal, highlighted },
                 BlockVertex { position: [x + dx, y,      z + dz], texture_coordinates: [dz,  1.0], texture_id: t.1 as i32, normal, highlighted },
@@ -101,8 +102,9 @@ impl Quad {
         }
 
         if self.visible_faces & FACE_BACK == FACE_BACK {
-            let normal = [0.0, 0.0, -1.0];
-            let highlighted = (normal == highlighted) as i32;
+            let normal = Vector3::new(0, 0, -1);
+            let highlighted = (self.highlighted_normal == normal) as i32;
+            let normal = normal.cast().unwrap().into();
             vertices.extend(&[
                 BlockVertex { position: [x,      y,      z], texture_coordinates: [dx,  1.0], texture_id: t.2 as i32, normal, highlighted },
                 BlockVertex { position: [x,      y + dy, z], texture_coordinates: [dx,  0.0], texture_id: t.2 as i32, normal, highlighted },
@@ -117,8 +119,9 @@ impl Quad {
         }
 
         if self.visible_faces & FACE_FRONT == FACE_FRONT {
-            let normal = [0.0, 0.0, 1.0];
-            let highlighted = (normal == highlighted) as i32;
+            let normal = Vector3::new(0, 0, 1);
+            let highlighted = (self.highlighted_normal == normal) as i32;
+            let normal = normal.cast().unwrap().into();
             vertices.extend(&[
                 BlockVertex { position: [x,      y,      z + dz], texture_coordinates: [0.0, 1.0], texture_id: t.3 as i32, normal, highlighted },
                 BlockVertex { position: [x,      y + dy, z + dz], texture_coordinates: [0.0, 0.0], texture_id: t.3 as i32, normal, highlighted },
@@ -133,8 +136,9 @@ impl Quad {
         }
 
         if self.visible_faces & FACE_BOTTOM == FACE_BOTTOM {
-            let normal = [0.0, -1.0, 0.0];
-            let highlighted = (normal == highlighted) as i32;
+            let normal = Vector3::new(0, -1, 0);
+            let highlighted = (self.highlighted_normal == normal) as i32;
+            let normal = normal.cast().unwrap().into();
             vertices.extend(&[
                 BlockVertex { position: [x,      y, z     ], texture_coordinates: [dx,  0.0], texture_id: t.4 as i32, normal, highlighted },
                 BlockVertex { position: [x,      y, z + dz], texture_coordinates: [dx,  dz ], texture_id: t.4 as i32, normal, highlighted },
@@ -149,8 +153,9 @@ impl Quad {
         }
 
         if self.visible_faces & FACE_TOP == FACE_TOP {
-            let normal = [0.0, 1.0, 0.0];
-            let highlighted = (normal == highlighted) as i32;
+            let normal = Vector3::new(0, 1, 0);
+            let highlighted = (self.highlighted_normal == normal) as i32;
+            let normal = normal.cast().unwrap().into();
             vertices.extend(&[
                 BlockVertex { position: [x,      y + dy, z     ], texture_coordinates: [0.0, 0.0], texture_id: t.5 as i32, normal, highlighted },
                 BlockVertex { position: [x,      y + dy, z + dz], texture_coordinates: [0.0, dz ], texture_id: t.5 as i32, normal, highlighted },

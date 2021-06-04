@@ -287,8 +287,8 @@ impl HudState {
 pub const HUD_VERTICES: [HudVertex; 12] = [
     // Crosshair
     HudVertex { position: [UI_SCALE_X *  -8.0,        UI_SCALE_Y *  8.0], texture_coordinates: [240.0 / 256.0,   0.0 / 256.0] },
-    HudVertex { position: [UI_SCALE_X *   8.0,        UI_SCALE_Y *  8.0], texture_coordinates: [256.0 / 256.0,   0.0 / 256.0] },
-    HudVertex { position: [UI_SCALE_X *   8.0,        UI_SCALE_Y * -8.0], texture_coordinates: [256.0 / 256.0,  16.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X *   8.0,        UI_SCALE_Y *  8.0], texture_coordinates: [  1.0,           0.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X *   8.0,        UI_SCALE_Y * -8.0], texture_coordinates: [  1.0,          16.0 / 256.0] },
     HudVertex { position: [UI_SCALE_X *  -8.0,        UI_SCALE_Y * -8.0], texture_coordinates: [240.0 / 256.0,  16.0 / 256.0] },
 
     // Hotbar

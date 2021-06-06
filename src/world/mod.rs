@@ -1,18 +1,28 @@
-use std::time::Instant;
-use std::{collections::VecDeque, time::Duration};
+pub mod block;
+pub mod chunk;
+pub mod face_flags;
+pub mod quad;
+
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 use crate::{
     camera::Camera,
-    chunk::{self, Block, BlockType, Chunk, CHUNK_ISIZE},
     geometry::GeometryBuffers,
     npc::Npc,
     render_context::RenderContext,
     renderable::Renderable,
     view::View,
+    world::{
+        block::{Block, BlockType},
+        chunk::{Chunk, CHUNK_ISIZE},
+    },
 };
 use ahash::AHashMap;
 use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3};
-use wgpu::{BufferUsage, RenderPass};
+use wgpu::RenderPass;
 
 pub struct World {
     pub npc: Npc,
@@ -203,17 +213,7 @@ impl World {
         chunk_position: Point3<isize>,
     ) {
         let chunk = self.chunks.get_mut(&chunk_position).unwrap();
-        let offset = chunk_position * CHUNK_ISIZE;
-        let geometry = chunk.to_geometry(
-            offset,
-            World::highlighted_for_chunk(self.highlighted, &chunk_position).as_ref(),
-        );
-
-        chunk.buffers = Some(GeometryBuffers::from_geometry(
-            render_context,
-            &geometry,
-            BufferUsage::empty(),
-        ));
+        chunk.update_geometry(render_context, chunk_position, self.highlighted);
     }
 
     fn update_highlight(&mut self, render_context: &RenderContext, camera: &Camera) {
@@ -260,29 +260,6 @@ impl World {
             );
 
             self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
-        }
-    }
-
-    pub fn highlighted_for_chunk(
-        highlighted: Option<(Point3<isize>, Vector3<i32>)>,
-        chunk_position: &Point3<isize>,
-    ) -> Option<(Point3<usize>, Vector3<i32>)> {
-        let position = chunk_position * CHUNK_ISIZE;
-        if let Some((pos, face)) = highlighted {
-            if pos.x >= position.x
-                && pos.x < position.x + CHUNK_ISIZE
-                && pos.y >= position.y
-                && pos.y < position.y + CHUNK_ISIZE
-                && pos.z >= position.z
-                && pos.z < position.z + CHUNK_ISIZE
-            {
-                let point: Point3<isize> = EuclideanSpace::from_vec(pos - position);
-                Some((point.cast().unwrap(), face))
-            } else {
-                None
-            }
-        } else {
-            None
         }
     }
 

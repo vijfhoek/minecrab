@@ -1,81 +1,33 @@
-use std::{collections::VecDeque, usize};
+use std::collections::VecDeque;
 
 use crate::{
     aabb::Aabb,
     geometry::{Geometry, GeometryBuffers},
-    quad::Quad,
+    render_context::RenderContext,
     vertex::BlockVertex,
     view::View,
+    world::{
+        block::{Block, BlockType},
+        face_flags::*,
+        quad::Quad,
+    },
 };
 use ahash::{AHashMap, AHashSet};
 use cgmath::{Point3, Vector3};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-
 use serde::{
     de::{SeqAccess, Visitor},
-    ser::{SerializeSeq, Serializer},
-    Deserialize, Serialize,
+    ser::SerializeSeq,
+    Deserialize, Serialize, Serializer,
 };
-use serde_repr::{Deserialize_repr, Serialize_repr};
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize_repr, Deserialize_repr)]
-#[repr(u8)]
-pub enum BlockType {
-    Cobblestone = 1,
-    Dirt = 2,
-    Stone = 3,
-    Grass = 4,
-    Bedrock = 5,
-    Sand = 6,
-    Gravel = 7,
-    Water = 8,
-}
-
-impl BlockType {
-    #[rustfmt::skip]
-    pub const fn texture_indices(self) -> (usize, usize, usize, usize, usize, usize) {
-        match self {
-            BlockType::Cobblestone => ( 0,  0,  0,  0,  0,  0),
-            BlockType::Dirt        => ( 1,  1,  1,  1,  1,  1),
-            BlockType::Stone       => ( 2,  2,  2,  2,  2,  2),
-            BlockType::Grass       => ( 4,  4,  4,  4,  2,  3),
-            BlockType::Bedrock     => ( 5,  5,  5,  5,  5,  5),
-            BlockType::Sand        => ( 6,  6,  6,  6,  6,  6),
-            BlockType::Gravel      => ( 7,  7,  7,  7,  7,  7),
-            BlockType::Water       => ( 8,  8,  8,  8,  8,  8), // up to 71
-        }
-    }
-
-    pub const fn is_transparent(self) -> bool {
-        matches!(self, BlockType::Water)
-    }
-}
-
-pub type FaceFlags = usize;
-pub const FACE_NONE: FaceFlags = 0;
-pub const FACE_LEFT: FaceFlags = 1;
-pub const FACE_RIGHT: FaceFlags = 2;
-pub const FACE_BOTTOM: FaceFlags = 4;
-pub const FACE_TOP: FaceFlags = 8;
-pub const FACE_BACK: FaceFlags = 16;
-pub const FACE_FRONT: FaceFlags = 32;
-pub const FACE_ALL: FaceFlags =
-    FACE_LEFT | FACE_RIGHT | FACE_BOTTOM | FACE_TOP | FACE_BACK | FACE_FRONT;
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct Block {
-    pub block_type: BlockType,
-}
+use wgpu::BufferUsage;
 
 pub const CHUNK_SIZE: usize = 32;
 pub const CHUNK_ISIZE: isize = CHUNK_SIZE as isize;
 
-type ChunkBlocks = [[[Option<Block>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE];
-
 pub struct Chunk {
-    pub blocks: ChunkBlocks,
+    pub blocks: [[[Option<Block>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
     pub buffers: Option<GeometryBuffers<u16>>,
 }
 
@@ -85,23 +37,6 @@ impl Default for Chunk {
             blocks: [[[None; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
             buffers: None,
         }
-    }
-}
-
-impl Serialize for Chunk {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut seq = serializer.serialize_seq(Some(CHUNK_SIZE.pow(3)))?;
-        for layer in self.blocks.iter() {
-            for row in layer {
-                for block in row {
-                    seq.serialize_element(block)?;
-                }
-            }
-        }
-        seq.end()
     }
 }
 
@@ -128,6 +63,23 @@ impl<'de> Visitor<'de> for ChunkVisitor {
         }
 
         Ok(chunk)
+    }
+}
+
+impl Serialize for Chunk {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(CHUNK_SIZE.pow(3)))?;
+        for layer in self.blocks.iter() {
+            for row in layer {
+                for block in row {
+                    seq.serialize_element(block)?;
+                }
+            }
+        }
+        seq.end()
     }
 }
 
@@ -218,6 +170,22 @@ impl Chunk {
         }
     }
 
+    pub fn block_coords_to_local(
+        chunk_coords: Point3<isize>,
+        block_coords: Point3<isize>,
+    ) -> Option<Vector3<usize>> {
+        let chunk_position = chunk_coords * CHUNK_ISIZE;
+        let position = block_coords - chunk_position;
+        if (0..CHUNK_ISIZE).contains(&position.x)
+            && (0..CHUNK_ISIZE).contains(&position.y)
+            && (0..CHUNK_ISIZE).contains(&position.z)
+        {
+            Some(position.cast().unwrap())
+        } else {
+            None
+        }
+    }
+
     #[rustfmt::skip]
     fn check_visible_faces(&self, x: usize, y: usize, z: usize) -> FaceFlags {
         let mut visible_faces = FACE_NONE;
@@ -294,7 +262,7 @@ impl Chunk {
         offset: Point3<isize>,
         culled: AHashMap<(usize, usize), (BlockType, FaceFlags)>,
         queue: &mut VecDeque<(usize, usize)>,
-        highlighted: Option<&(Point3<usize>, Vector3<i32>)>,
+        highlighted: Option<(Vector3<usize>, Vector3<i32>)>,
     ) -> Vec<Quad> {
         let mut quads: Vec<Quad> = Vec::new();
         let mut visited = AHashSet::new();
@@ -310,7 +278,7 @@ impl Chunk {
             if let Some(&(block_type, visible_faces)) = &culled.get(&(x, z)) {
                 let mut quad_faces = visible_faces;
 
-                if hl == Some(Point3::new(x, y, z)) {
+                if hl == Some(Vector3::new(x, y, z)) {
                     let mut quad = Quad::new(position, 1, 1);
                     quad.highlighted_normal = highlighted.unwrap().1;
                     quad.visible_faces = quad_faces;
@@ -332,7 +300,7 @@ impl Chunk {
                 for x_ in x..CHUNK_SIZE {
                     xmax = x_ + 1;
 
-                    if visited.contains(&(xmax, z)) || hl == Some(Point3::new(xmax, y, z)) {
+                    if visited.contains(&(xmax, z)) || hl == Some(Vector3::new(xmax, y, z)) {
                         break;
                     }
 
@@ -354,7 +322,7 @@ impl Chunk {
                     zmax = z_ + 1;
 
                     for x_ in x..xmax {
-                        if visited.contains(&(x_, zmax)) || hl == Some(Point3::new(x_, y, zmax)) {
+                        if visited.contains(&(x_, zmax)) || hl == Some(Vector3::new(x_, y, zmax)) {
                             break 'z;
                         }
 
@@ -391,20 +359,30 @@ impl Chunk {
         geometry
     }
 
-    pub fn to_geometry(
-        &self,
-        position: Point3<isize>,
-        highlighted: Option<&(Point3<usize>, Vector3<i32>)>,
-    ) -> Geometry<BlockVertex, u16> {
+    pub fn update_geometry(
+        &mut self,
+        render_context: &RenderContext,
+        chunk_coords: Point3<isize>,
+        highlighted: Option<(Point3<isize>, Vector3<i32>)>,
+    ) {
+        let highlighted = highlighted.and_then(|(position, normal)| {
+            Self::block_coords_to_local(chunk_coords, position).map(|x| (x, normal))
+        });
+
+        let offset = chunk_coords * CHUNK_ISIZE;
         let quads: Vec<Quad> = (0..CHUNK_SIZE)
             .into_par_iter()
             .flat_map(|y| {
                 let (culled, mut queue) = self.cull_layer(y);
-                self.layer_to_quads(y, position, culled, &mut queue, highlighted)
+                self.layer_to_quads(y, offset, culled, &mut queue, highlighted)
             })
             .collect();
 
-        Self::quads_to_geometry(quads)
+        self.buffers = Some(GeometryBuffers::from_geometry(
+            render_context,
+            &Self::quads_to_geometry(quads),
+            BufferUsage::empty(),
+        ));
     }
 
     pub fn save(&self, position: Point3<isize>, store: &sled::Db) -> anyhow::Result<()> {

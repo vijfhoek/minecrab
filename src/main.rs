@@ -1,9 +1,7 @@
 mod aabb;
 mod camera;
-mod chunk;
 mod geometry;
 mod npc;
-mod quad;
 mod render_context;
 mod renderable;
 mod state;

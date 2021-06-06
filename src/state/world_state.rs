@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use cgmath::{InnerSpace, Point3, Rad, Vector3};
+use cgmath::{ElementWise, InnerSpace, Point3, Rad, Vector3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     CommandEncoder, SwapChainTexture,
@@ -11,6 +11,7 @@ use winit::{
 };
 
 use crate::{
+    aabb::Aabb,
     camera::{Camera, Projection},
     render_context::RenderContext,
     renderable::Renderable,
@@ -378,13 +379,24 @@ impl WorldState {
     }
 
     fn check_collision(&self, position: Point3<f32>) -> bool {
-        self.world
-            .get_block(
-                position.x as isize,
-                (position.y - 1.8) as isize,
-                position.z as isize,
-            )
-            .is_some()
+        let aabb = Aabb {
+            min: position + Vector3::new(-0.3, -1.8, -0.3),
+            max: position + Vector3::new(0.3, 0.0, 0.3),
+        };
+
+        for corner in &aabb.get_corners() {
+            let block = self.world.get_block(
+                corner.x.floor() as isize,
+                corner.y.floor() as isize,
+                corner.z.floor() as isize,
+            );
+
+            if block.is_some() {
+                return true;
+            }
+        }
+
+        false
     }
 
     fn update_position(&mut self, dt: Duration) {
@@ -393,29 +405,52 @@ impl WorldState {
 
         let speed = 10.0 * (self.sprinting as i32 * 2 + 1) as f32;
 
-        let mut new_position = self.camera.position;
-
-        let up = Vector3::unit_y() * self.up_speed * speed * dt_seconds;
-        new_position += up;
-        if !self.creative && self.check_collision(new_position) {
-            new_position -= up;
-            self.up_speed = 0.0;
-        }
-
         let forward_speed = self.forward_pressed as i32 - self.backward_pressed as i32;
-        let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
-        let forward = forward * forward_speed as f32 * speed * dt_seconds;
-        new_position += forward;
-        if !self.creative && self.check_collision(new_position) {
-            new_position -= forward;
-        }
+        let forward = Vector3::new(yaw_cos, 0.0, yaw_sin);
+        let forward = forward * forward_speed as f32;
 
         let right_speed = self.right_pressed as i32 - self.left_pressed as i32;
-        let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        let right = right * right_speed as f32 * speed * dt_seconds;
-        new_position += right;
-        if !self.creative && self.check_collision(new_position) {
-            new_position -= right;
+        let right = Vector3::new(-yaw_sin, 0.0, yaw_cos);
+        let right = right * right_speed as f32;
+
+        let mut velocity = forward + right;
+        if velocity.magnitude2() > 1.0 {
+            velocity = velocity.normalize();
+        }
+        velocity *= speed * dt.as_secs_f32();
+
+        let mut new_position = self.camera.position;
+
+        // y component (jumping)
+        new_position.y += self.up_speed * speed * dt_seconds;
+        while self.check_collision(new_position) {
+            self.up_speed = 0.0;
+
+            if velocity.y <= -0.0 {
+                new_position.y = (new_position.y - 1.8).floor() + 2.8;
+            } else {
+                new_position.y = (new_position.y - 0.0001).ceil() - 1.0001;
+            }
+        }
+
+        // x component
+        new_position.x += velocity.x;
+        while self.check_collision(new_position) {
+            if velocity.x <= -0.0 {
+                new_position.x = (new_position.x - 0.2999).floor() + 1.3;
+            } else {
+                new_position.x = (new_position.x + 0.3).ceil() - 1.3001;
+            }
+        }
+
+        // z component
+        new_position.z += velocity.z;
+        while self.check_collision(new_position) {
+            if velocity.z <= -0.0 {
+                new_position.z = (new_position.z - 0.2999).floor() + 1.3;
+            } else {
+                new_position.z = (new_position.z + 0.3).ceil() - 1.3001;
+            }
         }
 
         self.camera.position = new_position;

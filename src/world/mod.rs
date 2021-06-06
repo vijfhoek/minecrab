@@ -10,7 +10,6 @@ use std::{
 
 use crate::{
     camera::Camera,
-    geometry::GeometryBuffers,
     npc::Npc,
     render_context::RenderContext,
     renderable::Renderable,
@@ -342,7 +341,7 @@ impl World {
 
         let mut face;
 
-        while lengths.magnitude() < 100.0 {
+        while lengths.magnitude2() < 100.0_f32.powi(2) {
             if lengths.x < lengths.y && lengths.x < lengths.z {
                 lengths.x += scale.x;
                 position.x += step.x;

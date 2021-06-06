@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use cgmath::{ElementWise, InnerSpace, Point3, Rad, Vector3};
+use cgmath::{InnerSpace, Point3, Rad, Vector3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     CommandEncoder, SwapChainTexture,

@@ -1,7 +1,4 @@
-use std::ops::Sub;
-
-use cgmath::{Point3, Vector3};
-use itertools::Itertools;
+use cgmath::Point3;
 
 type T = f32;
 

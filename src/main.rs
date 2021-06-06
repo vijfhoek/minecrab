@@ -5,6 +5,7 @@ mod geometry;
 mod npc;
 mod quad;
 mod render_context;
+mod renderable;
 mod state;
 mod text_renderer;
 mod texture;
@@ -156,25 +157,32 @@ fn main() {
                     frametime_max = Duration::from_secs(0);
                 }
 
+                let dt = last_render_time.elapsed();
                 let now = Instant::now();
-                let dt = now - last_render_time;
                 last_render_time = now;
-                state.update(dt);
 
-                match state.render() {
-                    Err(root_cause) => match root_cause.downcast_ref::<SwapChainError>() {
-                        // Recreate the swap_chain if lost
-                        Some(wgpu::SwapChainError::Lost) => state.resize(state.window_size),
-                        // The system is out of memory, we should probably quit
-                        Some(wgpu::SwapChainError::OutOfMemory) => {
-                            *control_flow = ControlFlow::Exit
-                        }
-                        // All other errors (Outdated, Timeout) should be resolved by the next frame
-                        Some(_) | None => eprintln!("{:?}", root_cause),
-                    },
+                let render_time = match state.render() {
+                    Err(root_cause) => {
+                        match root_cause.downcast_ref::<SwapChainError>() {
+                            // Recreate the swap_chain if lost
+                            Some(wgpu::SwapChainError::Lost) => state.resize(state.window_size),
+                            // The system is out of memory, we should probably quit
+                            Some(wgpu::SwapChainError::OutOfMemory) => {
+                                *control_flow = ControlFlow::Exit
+                            }
+                            // All other errors (Outdated, Timeout) should be resolved by the next frame
+                            Some(_) | None => eprintln!("{:?}", root_cause),
+                        };
+                        return;
+                    }
 
-                    Ok(v) => triangle_count = v,
-                }
+                    Ok((triangle_count_, render_time)) => {
+                        triangle_count = triangle_count_;
+                        render_time
+                    }
+                };
+
+                state.update(dt, render_time);
             }
             Event::MainEventsCleared => {
                 // RedrawRequested will only trigger once, unless we manually

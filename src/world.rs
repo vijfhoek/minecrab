@@ -1,11 +1,13 @@
+use std::time::Instant;
 use std::{collections::VecDeque, time::Duration};
 
 use crate::{
     camera::Camera,
-    chunk::{Block, BlockType, Chunk, CHUNK_ISIZE},
+    chunk::{self, Block, BlockType, Chunk, CHUNK_ISIZE},
     geometry::GeometryBuffers,
     npc::Npc,
     render_context::RenderContext,
+    renderable::Renderable,
     view::View,
 };
 use ahash::AHashMap;
@@ -31,72 +33,14 @@ pub const WORLD_HEIGHT: isize = 16 * 16 / CHUNK_ISIZE;
 
 const DEBUG_IO: bool = false;
 
-impl World {
-    pub fn new() -> Self {
-        let chunks = AHashMap::new();
-        let npc = Npc::load();
-
-        let chunk_database = sled::Config::new()
-            .path("chunks")
-            .mode(sled::Mode::HighThroughput)
-            .use_compression(true)
-            .open()
-            .unwrap();
-
-        Self {
-            chunks,
-            npc,
-
-            chunk_database,
-            chunk_load_queue: VecDeque::new(),
-            chunk_save_queue: VecDeque::new(),
-            chunk_generate_queue: VecDeque::new(),
-
-            highlighted: None,
-
-            unload_timer: Duration::new(0, 0),
-        }
-    }
-
-    pub fn update(&mut self, dt: Duration, render_context: &RenderContext, camera: &Camera) {
-        if let Some(position) = self.chunk_load_queue.pop_front() {
-            let chunk = self.chunks.entry(position).or_default();
-            match chunk.load(position, &self.chunk_database) {
-                Err(error) => {
-                    eprintln!("Failed to load/generate chunk {:?}: {:?}", position, error)
-                }
-                Ok(true) => {
-                    self.update_chunk_geometry(render_context, position);
-                    self.enqueue_chunk_save(position, false);
-                    if DEBUG_IO {
-                        println!("Generated chunk {:?}", position);
-                    }
-                }
-                Ok(false) => {
-                    self.update_chunk_geometry(render_context, position);
-                    if DEBUG_IO {
-                        println!("Loaded chunk {:?}", position);
-                    }
-                }
-            }
-        } else if let Some((position, unload)) = self.chunk_save_queue.pop_front() {
-            if let Some(chunk) = self.chunks.get(&position) {
-                if let Err(err) = chunk.save(position, &self.chunk_database) {
-                    eprintln!("Failed to save chunk {:?}: {:?}", position, err);
-                } else if unload {
-                    self.chunks.remove(&position);
-
-                    if DEBUG_IO {
-                        println!("Saved and unloaded chunk {:?}", position);
-                    }
-                } else if DEBUG_IO {
-                    println!("Saved chunk {:?}", position);
-                }
-            } else {
-                eprintln!("Tried to save unloaded chunk {:?}", position);
-            }
-        }
-
+impl Renderable for World {
+    fn update(
+        &mut self,
+        render_context: &RenderContext,
+        dt: Duration,
+        render_time: Duration,
+        camera: &Camera,
+    ) {
         self.update_highlight(render_context, camera);
 
         // Queue up new chunks for loading, if necessary
@@ -142,9 +86,55 @@ impl World {
                 self.enqueue_chunk_save(point, true);
             }
         }
+
+        let start = Instant::now() - render_time;
+        let mut chunk_updates = 0;
+        while chunk_updates == 0 || start.elapsed() < Duration::from_millis(16) {
+            if let Some(position) = self.chunk_load_queue.pop_front() {
+                let chunk = self.chunks.entry(position).or_default();
+                match chunk.load(position, &self.chunk_database) {
+                    Err(error) => {
+                        eprintln!("Failed to load/generate chunk {:?}: {:?}", position, error)
+                    }
+                    Ok(true) => {
+                        self.update_chunk_geometry(render_context, position);
+                        self.enqueue_chunk_save(position, false);
+                        if DEBUG_IO {
+                            println!("Generated chunk {:?}", position);
+                        }
+                    }
+                    Ok(false) => {
+                        self.update_chunk_geometry(render_context, position);
+                        if DEBUG_IO {
+                            println!("Loaded chunk {:?}", position);
+                        }
+                    }
+                }
+            } else if let Some((position, unload)) = self.chunk_save_queue.pop_front() {
+                if let Some(chunk) = self.chunks.get(&position) {
+                    if let Err(err) = chunk.save(position, &self.chunk_database) {
+                        eprintln!("Failed to save chunk {:?}: {:?}", position, err);
+                    } else if unload {
+                        self.chunks.remove(&position);
+
+                        if DEBUG_IO {
+                            println!("Saved and unloaded chunk {:?}", position);
+                        }
+                    } else if DEBUG_IO {
+                        println!("Saved chunk {:?}", position);
+                    }
+                } else {
+                    eprintln!("Tried to save unloaded chunk {:?}", position);
+                }
+            } else {
+                break;
+            }
+
+            chunk_updates += 1;
+        }
     }
 
-    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, view: &View) -> usize {
+    fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, view: &View) -> usize {
         let mut triangle_count = 0;
 
         for (position, chunk) in &self.chunks {
@@ -165,6 +155,34 @@ impl World {
         }
 
         triangle_count
+    }
+}
+
+impl World {
+    pub fn new() -> Self {
+        let chunks = AHashMap::new();
+        let npc = Npc::load();
+
+        let chunk_database = sled::Config::new()
+            .path("chunks")
+            .mode(sled::Mode::HighThroughput)
+            .use_compression(true)
+            .open()
+            .unwrap();
+
+        Self {
+            chunks,
+            npc,
+
+            chunk_database,
+            chunk_load_queue: VecDeque::new(),
+            chunk_save_queue: VecDeque::new(),
+            chunk_generate_queue: VecDeque::new(),
+
+            highlighted: None,
+
+            unload_timer: Duration::new(0, 0),
+        }
     }
 
     pub fn enqueue_chunk_save(&mut self, position: Point3<isize>, unload: bool) {

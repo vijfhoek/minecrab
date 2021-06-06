@@ -1,7 +1,7 @@
 pub mod hud_state;
 pub mod world_state;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use cgmath::EuclideanSpace;
 use winit::{
@@ -189,30 +189,36 @@ impl State {
         }
     }
 
-    pub fn update(&mut self, dt: Duration) {
-        self.world_state.update(dt, &self.render_context);
+    pub fn update(&mut self, dt: Duration, render_time: Duration) {
+        self.world_state
+            .update(dt, render_time, &self.render_context);
         self.hud_state.update(
             &self.render_context,
             &self.world_state.camera.position.to_vec(),
         );
     }
 
-    pub fn render(&mut self) -> anyhow::Result<usize> {
-        let frame = self.render_context.swap_chain.get_current_frame()?.output;
+    pub fn render(&mut self) -> anyhow::Result<(usize, Duration)> {
+        let render_start = Instant::now();
 
-        let mut render_encoder = self
-            .render_context
-            .device
-            .create_command_encoder(&Default::default());
+        Ok({
+            let frame = self.render_context.swap_chain.get_current_frame()?.output;
 
-        let mut triangle_count = 0;
-        triangle_count += self.world_state.render(&frame, &mut render_encoder);
-        triangle_count += self.hud_state.render(&frame, &mut render_encoder)?;
+            let mut render_encoder = self
+                .render_context
+                .device
+                .create_command_encoder(&Default::default());
 
-        self.render_context
-            .queue
-            .submit(std::iter::once(render_encoder.finish()));
+            let mut triangle_count = 0;
+            triangle_count += self.world_state.render(&frame, &mut render_encoder);
+            triangle_count += self.hud_state.render(&frame, &mut render_encoder)?;
 
-        Ok(triangle_count)
+            self.render_context
+                .queue
+                .submit(std::iter::once(render_encoder.finish()));
+            let render_time = render_start.elapsed();
+
+            (triangle_count, render_time)
+        })
     }
 }

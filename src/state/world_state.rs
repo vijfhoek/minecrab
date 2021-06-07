@@ -17,6 +17,7 @@ use crate::{
     renderable::Renderable,
     texture::{Texture, TextureManager},
     time::Time,
+    utils,
     vertex::{BlockVertex, Vertex},
     view::View,
     world::World,
@@ -408,35 +409,38 @@ impl WorldState {
         None
     }
 
+    /// Updates the player's position by their velocity, checks for and
+    /// resolves any subsequent collisions, and then adds the jumping speed to
+    /// the velocity.
     fn update_position(&mut self, dt: Duration) {
-        let dt_seconds = dt.as_secs_f32();
         let (yaw_sin, yaw_cos) = self.camera.yaw.0.sin_cos();
 
-        let speed = 10.0 * (self.sprinting as i32 * 2 + 1) as f32;
+        let speed = 10.0 * (self.sprinting as i32 * 2 + 1) as f32 * dt.as_secs_f32();
 
         let forward_speed = self.forward_pressed as i32 - self.backward_pressed as i32;
-        let forward = Vector3::new(yaw_cos, 0.0, yaw_sin);
-        let forward = forward * forward_speed as f32;
+        let forward = Vector3::new(yaw_cos, 0.0, yaw_sin) * forward_speed as f32;
 
         let right_speed = self.right_pressed as i32 - self.left_pressed as i32;
-        let right = Vector3::new(-yaw_sin, 0.0, yaw_cos);
-        let right = right * right_speed as f32;
+        let right = Vector3::new(-yaw_sin, 0.0, yaw_cos) * right_speed as f32;
 
         let mut velocity = forward + right;
         if velocity.magnitude2() > 1.0 {
             velocity = velocity.normalize();
         }
-        velocity *= speed * dt.as_secs_f32();
+        velocity *= speed;
+        velocity.y = self.up_speed * 10.0 * dt.as_secs_f32();
 
         let mut new_position = self.camera.position;
 
         // y component (jumping)
-        new_position.y += self.up_speed * speed * dt_seconds;
+        new_position.y += velocity.y;
         if let Some(aabb) = self.check_collision(new_position) {
             if self.up_speed < 0.0 {
                 new_position.y = aabb.min.y.ceil() + 1.62;
+                new_position.y = utils::f32_successor(new_position.y);
             } else if self.up_speed > 0.0 {
-                new_position.y = aabb.max.y.floor() - 0.1801;
+                new_position.y = aabb.max.y.floor() - 0.18;
+                new_position.y = utils::f32_predecessor(new_position.y);
             }
 
             self.up_speed = 0.0;
@@ -447,8 +451,10 @@ impl WorldState {
         if let Some(aabb) = self.check_collision(new_position) {
             if velocity.x < 0.0 {
                 new_position.x = aabb.min.x.ceil() + 0.3;
+                new_position.x = utils::f32_successor(new_position.x);
             } else if velocity.x > 0.0 {
-                new_position.x = aabb.max.x.floor() - 0.3001;
+                new_position.x = aabb.max.x.floor() - 0.3;
+                new_position.x = utils::f32_predecessor(new_position.x);
             }
         }
 
@@ -457,8 +463,10 @@ impl WorldState {
         if let Some(aabb) = self.check_collision(new_position) {
             if velocity.z < 0.0 {
                 new_position.z = aabb.min.z.ceil() + 0.3;
+                new_position.z = utils::f32_successor(new_position.z);
             } else if velocity.z > 0.0 {
-                new_position.z = aabb.max.z.floor() - 0.3001;
+                new_position.z = aabb.max.z.floor() - 0.3;
+                new_position.z = utils::f32_predecessor(new_position.z);
             }
         }
 

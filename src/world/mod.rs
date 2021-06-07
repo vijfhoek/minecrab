@@ -123,14 +123,18 @@ impl Renderable for World {
                 if let Some(chunk) = self.chunks.get(&position) {
                     if let Err(err) = chunk.save(position, &self.chunk_database) {
                         eprintln!("Failed to save chunk {:?}: {:?}", position, err);
-                    } else if unload {
+                    } else {
+                        if unload {
                         self.chunks.remove(&position);
 
                         if DEBUG_IO {
                             println!("Saved and unloaded chunk {:?}", position);
                         }
-                    } else if DEBUG_IO {
+                        } else {
+                            if DEBUG_IO {
                         println!("Saved chunk {:?}", position);
+                    }
+                        }
                     }
                 } else {
                     eprintln!("Tried to save unloaded chunk {:?}", position);
@@ -292,8 +296,7 @@ impl World {
             chunk.blocks[by][bz][bx] = block;
         }
 
-        self.chunk_save_queue
-            .push_back((chunk_position / CHUNK_ISIZE, false));
+        self.enqueue_chunk_save(chunk_position, false);
     }
 
     fn calc_scale(vector: Vector3<f32>, scalar: f32) -> f32 {

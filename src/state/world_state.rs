@@ -360,14 +360,23 @@ impl WorldState {
             VirtualKeyCode::D => self.right_pressed = pressed,
             VirtualKeyCode::F2 if pressed => self.creative = !self.creative,
             VirtualKeyCode::Space => {
+                // TODO aaaaaaaaaaaaaaaaaa
                 self.up_speed = if pressed {
                     if self.creative {
                         1.0
                     } else {
-                        0.6
+                        if self.up_speed.abs() < 0.05 {
+                            0.6
+                        } else {
+                            self.up_speed
+                        }
                     }
                 } else {
-                    0.0
+                    if self.creative {
+                        0.0
+                    } else {
+                        self.up_speed
+                    }
                 }
             }
             VirtualKeyCode::LShift if self.creative => {
@@ -378,10 +387,10 @@ impl WorldState {
         }
     }
 
-    fn check_collision(&self, position: Point3<f32>) -> bool {
+    fn check_collision(&self, position: Point3<f32>) -> Option<Aabb> {
         let aabb = Aabb {
-            min: position + Vector3::new(-0.3, -1.8, -0.3),
-            max: position + Vector3::new(0.3, 0.0, 0.3),
+            min: position + Vector3::new(-0.3, -1.62, -0.3),
+            max: position + Vector3::new(0.3, 0.18, 0.3),
         };
 
         for corner in &aabb.get_corners() {
@@ -392,11 +401,11 @@ impl WorldState {
             );
 
             if block.is_some() {
-                return true;
+                return Some(aabb);
             }
         }
 
-        false
+        None
     }
 
     fn update_position(&mut self, dt: Duration) {
@@ -423,33 +432,33 @@ impl WorldState {
 
         // y component (jumping)
         new_position.y += self.up_speed * speed * dt_seconds;
-        while self.check_collision(new_position) {
-            self.up_speed = 0.0;
-
-            if velocity.y <= -0.0 {
-                new_position.y = (new_position.y - 1.8).floor() + 2.8;
-            } else {
-                new_position.y = (new_position.y - 0.0001).ceil() - 1.0001;
+        if let Some(aabb) = self.check_collision(new_position) {
+            if self.up_speed < 0.0 {
+                new_position.y = aabb.min.y.ceil() + 1.62;
+            } else if self.up_speed > 0.0 {
+                new_position.y = aabb.max.y.floor() - 0.1801;
             }
+
+            self.up_speed = 0.0;
         }
 
         // x component
         new_position.x += velocity.x;
-        while self.check_collision(new_position) {
-            if velocity.x <= -0.0 {
-                new_position.x = (new_position.x - 0.2999).floor() + 1.3;
-            } else {
-                new_position.x = (new_position.x + 0.3).ceil() - 1.3001;
+        if let Some(aabb) = self.check_collision(new_position) {
+            if velocity.x < 0.0 {
+                new_position.x = aabb.min.x.ceil() + 0.3;
+            } else if velocity.x > 0.0 {
+                new_position.x = aabb.max.x.floor() - 0.3001;
             }
         }
 
         // z component
         new_position.z += velocity.z;
-        while self.check_collision(new_position) {
-            if velocity.z <= -0.0 {
-                new_position.z = (new_position.z - 0.2999).floor() + 1.3;
-            } else {
-                new_position.z = (new_position.z + 0.3).ceil() - 1.3001;
+        if let Some(aabb) = self.check_collision(new_position) {
+            if velocity.z < 0.0 {
+                new_position.z = aabb.min.z.ceil() + 0.3;
+            } else if velocity.z > 0.0 {
+                new_position.z = aabb.max.z.floor() - 0.3001;
             }
         }
 

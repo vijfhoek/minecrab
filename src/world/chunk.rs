@@ -412,6 +412,6 @@ impl Chunk {
                 .unwrap(),
         };
 
-        aabb.intersects(&view.aabb)
+        aabb.intersects(&view.frustrum_aabb)
     }
 }

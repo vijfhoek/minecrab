@@ -53,8 +53,7 @@ impl State {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("render_device"),
-                    features: wgpu::Features::NON_FILL_POLYGON_MODE
-                        | wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY,
+                    features: wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY,
                     limits: wgpu::Limits::default(),
                 },
                 None,
@@ -141,7 +140,6 @@ impl State {
     fn input_keyboard(&mut self, key_code: VirtualKeyCode, state: ElementState) {
         if state == ElementState::Pressed {
             match key_code {
-                VirtualKeyCode::F1 => self.world_state.toggle_wireframe(&self.render_context),
                 VirtualKeyCode::Key1 => self.hud_state.set_hotbar_cursor(&self.render_context, 0),
                 VirtualKeyCode::Key2 => self.hud_state.set_hotbar_cursor(&self.render_context, 1),
                 VirtualKeyCode::Key3 => self.hud_state.set_hotbar_cursor(&self.render_context, 2),
@@ -160,7 +158,7 @@ impl State {
 
     fn input_mouse(&mut self, dx: f64, dy: f64) {
         if self.mouse_grabbed {
-            self.world_state.update_camera(dx, dy);
+            self.world_state.player.update_camera(dx, dy);
         }
     }
 
@@ -202,7 +200,7 @@ impl State {
             .update(dt, render_time, &self.render_context);
         self.hud_state.update(
             &self.render_context,
-            &self.world_state.camera.position.to_vec(),
+            &self.world_state.player.view.camera.position.to_vec(),
         );
     }
 

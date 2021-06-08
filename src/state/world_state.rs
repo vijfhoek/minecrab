@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use cgmath::{InnerSpace, Point3, Rad, Vector3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     CommandEncoder, SwapChainTexture,
@@ -11,111 +10,28 @@ use winit::{
 };
 
 use crate::{
-    aabb::Aabb,
-    camera::{Camera, Projection},
+    player::Player,
     render_context::RenderContext,
     renderable::Renderable,
     texture::Texture,
     time::Time,
-    utils,
     vertex::{BlockVertex, Vertex},
-    view::View,
     world::{block::BlockType, World},
 };
 
 pub struct WorldState {
     pub render_pipeline: wgpu::RenderPipeline,
-    pub view: View,
-    pub view_buffer: wgpu::Buffer,
-    pub view_bind_group: wgpu::BindGroup,
-    pub camera: Camera,
-    pub projection: Projection,
     pub depth_texture: Texture,
-    pub time_bind_group: wgpu::BindGroup,
-    pub world: World,
 
     time: Time,
     time_buffer: wgpu::Buffer,
-    wireframe: bool,
-    shader: wgpu::ShaderModule,
-    render_pipeline_layout: wgpu::PipelineLayout,
+    pub time_bind_group: wgpu::BindGroup,
 
-    pub forward_pressed: bool,
-    pub backward_pressed: bool,
-    pub left_pressed: bool,
-    pub right_pressed: bool,
-
-    pub up_speed: f32,
-    pub sprinting: bool,
-    pub creative: bool,
+    pub world: World,
+    pub player: Player,
 }
 
 impl WorldState {
-    fn create_camera(render_context: &RenderContext) -> (Camera, Projection) {
-        let camera = Camera::new(
-            (10.0, 140.0, 10.0).into(),
-            cgmath::Deg(45.0).into(),
-            cgmath::Deg(-20.0).into(),
-        );
-
-        let projection = Projection::new(
-            render_context.swap_chain_descriptor.width,
-            render_context.swap_chain_descriptor.height,
-            cgmath::Deg(45.0),
-            0.1,
-            300.0,
-        );
-
-        (camera, projection)
-    }
-
-    fn create_view(
-        camera: &Camera,
-        projection: &Projection,
-        render_context: &RenderContext,
-    ) -> (View, wgpu::Buffer, wgpu::BindGroupLayout, wgpu::BindGroup) {
-        let mut view = View::new();
-        view.update_view_projection(camera, projection);
-
-        let view_buffer = render_context
-            .device
-            .create_buffer_init(&BufferInitDescriptor {
-                label: Some("view_buffer"),
-                contents: bytemuck::cast_slice(&[view.to_raw()]),
-                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-            });
-
-        let view_bind_group_layout =
-            render_context
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }],
-                    label: Some("view_bind_group_layout"),
-                });
-
-        let view_bind_group = render_context
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &view_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: view_buffer.as_entire_binding(),
-                }],
-                label: Some("view_bind_group"),
-            });
-
-        (view, view_buffer, view_bind_group_layout, view_bind_group)
-    }
-
     fn create_time(
         render_context: &RenderContext,
     ) -> (Time, wgpu::Buffer, wgpu::BindGroupLayout, wgpu::BindGroup) {
@@ -164,7 +80,6 @@ impl WorldState {
         render_context: &RenderContext,
         shader: &wgpu::ShaderModule,
         pipeline_layout: &wgpu::PipelineLayout,
-        wireframe: bool,
     ) -> wgpu::RenderPipeline {
         render_context
             .device
@@ -190,11 +105,7 @@ impl WorldState {
                 }),
                 primitive: wgpu::PrimitiveState {
                     cull_mode: Some(wgpu::Face::Back),
-                    polygon_mode: if wireframe {
-                        wgpu::PolygonMode::Line
-                    } else {
-                        wgpu::PolygonMode::Fill
-                    },
+                    polygon_mode: wgpu::PolygonMode::Fill,
                     ..Default::default()
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
@@ -208,23 +119,9 @@ impl WorldState {
             })
     }
 
-    pub fn toggle_wireframe(&mut self, render_context: &RenderContext) {
-        self.wireframe = !self.wireframe;
-        self.render_pipeline = Self::create_render_pipeline(
-            render_context,
-            &self.shader,
-            &self.render_pipeline_layout,
-            self.wireframe,
-        )
-    }
-
     pub fn new(render_context: &RenderContext) -> WorldState {
-        let (camera, projection) = Self::create_camera(render_context);
-
-        let (view, view_buffer, view_bind_group_layout, view_bind_group) =
-            Self::create_view(&camera, &projection, render_context);
-
         let (time, time_buffer, time_layout, time_bind_group) = Self::create_time(render_context);
+        let player = Player::new(render_context);
 
         let mut world = World::new();
         world.npc.load_geometry(render_context);
@@ -246,40 +143,24 @@ impl WorldState {
                     push_constant_ranges: &[],
                     bind_group_layouts: &[
                         &texture_manager.bind_group_layout,
-                        &view_bind_group_layout,
+                        &player.view.bind_group_layout,
                         &time_layout,
                     ],
                 });
         let render_pipeline =
-            Self::create_render_pipeline(&render_context, &shader, &render_pipeline_layout, false);
+            Self::create_render_pipeline(render_context, &shader, &render_pipeline_layout);
         let depth_texture = Texture::create_depth_texture(render_context, "depth_texture");
 
         Self {
             render_pipeline,
-            view,
-            view_buffer,
-            view_bind_group,
-            camera,
-            projection,
             depth_texture,
-            shader,
-            render_pipeline_layout,
 
             time,
             time_buffer,
             time_bind_group,
 
             world,
-
-            wireframe: false,
-
-            up_speed: 0.0,
-            sprinting: false,
-            forward_pressed: false,
-            backward_pressed: false,
-            left_pressed: false,
-            right_pressed: false,
-            creative: true,
+            player,
         }
     }
 
@@ -320,24 +201,12 @@ impl WorldState {
 
         let texture_manager = render_context.texture_manager.as_ref().unwrap();
         render_pass.set_bind_group(0, texture_manager.bind_group.as_ref().unwrap(), &[]);
-        render_pass.set_bind_group(1, &self.view_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.player.view.bind_group, &[]);
         render_pass.set_bind_group(2, &self.time_bind_group, &[]);
 
-        triangle_count += self.world.render(&mut render_pass, &self.view);
+        triangle_count += self.world.render(&mut render_pass, &self.player.view);
 
         triangle_count
-    }
-
-    pub fn update_camera(&mut self, dx: f64, dy: f64) {
-        let camera = &mut self.camera;
-        camera.yaw += Rad(dx as f32 * 0.003);
-        camera.pitch -= Rad(dy as f32 * 0.003);
-
-        if camera.pitch < Rad::from(cgmath::Deg(-80.0)) {
-            camera.pitch = Rad::from(cgmath::Deg(-80.0));
-        } else if camera.pitch > Rad::from(cgmath::Deg(89.9)) {
-            camera.pitch = Rad::from(cgmath::Deg(89.9));
-        }
     }
 
     pub fn input_mouse_button(
@@ -347,154 +216,60 @@ impl WorldState {
         selected: Option<BlockType>,
     ) {
         if button == &MouseButton::Left {
-            self.world.break_at_crosshair(render_context, &self.camera);
+            self.world
+                .break_at_crosshair(render_context, &self.player.view.camera);
         } else if button == &MouseButton::Right {
             if let Some(selected) = selected {
                 self.world
-                    .place_at_crosshair(render_context, &self.camera, selected);
+                    .place_at_crosshair(render_context, &self.player.view.camera, selected);
             }
         }
     }
 
+    #[allow(clippy::collapsible_else_if)]
     pub fn input_keyboard(&mut self, key_code: VirtualKeyCode, state: ElementState) {
         let pressed = state == ElementState::Pressed;
         match key_code {
-            VirtualKeyCode::W => self.forward_pressed = pressed,
-            VirtualKeyCode::S => self.backward_pressed = pressed,
-            VirtualKeyCode::A => self.left_pressed = pressed,
-            VirtualKeyCode::D => self.right_pressed = pressed,
-            VirtualKeyCode::F2 if pressed => self.creative = !self.creative,
+            VirtualKeyCode::W => self.player.forward_pressed = pressed,
+            VirtualKeyCode::S => self.player.backward_pressed = pressed,
+            VirtualKeyCode::A => self.player.left_pressed = pressed,
+            VirtualKeyCode::D => self.player.right_pressed = pressed,
+            VirtualKeyCode::F2 if pressed => self.player.creative ^= true,
             VirtualKeyCode::Space => {
                 // TODO aaaaaaaaaaaaaaaaaa
-                self.up_speed = if pressed {
-                    if self.creative {
+                self.player.up_speed = if pressed {
+                    if self.player.creative {
                         1.0
                     } else {
-                        if self.up_speed.abs() < 0.05 {
+                        if self.player.up_speed.abs() < 0.05 {
                             0.6
                         } else {
-                            self.up_speed
+                            self.player.up_speed
                         }
                     }
                 } else {
-                    if self.creative {
+                    if self.player.creative {
                         0.0
                     } else {
-                        self.up_speed
+                        self.player.up_speed
                     }
                 }
             }
-            VirtualKeyCode::LShift if self.creative => {
-                self.up_speed = if pressed { -1.0 } else { 0.0 }
+            VirtualKeyCode::LShift if self.player.creative => {
+                self.player.up_speed = if pressed { -1.0 } else { 0.0 }
             }
-            VirtualKeyCode::LControl => self.sprinting = pressed,
+            VirtualKeyCode::LControl => self.player.sprinting = pressed,
             _ => (),
         }
     }
 
-    fn check_collision(&self, position: Point3<f32>) -> Option<Aabb> {
-        let aabb = Aabb {
-            min: position + Vector3::new(-0.3, -1.62, -0.3),
-            max: position + Vector3::new(0.3, 0.18, 0.3),
-        };
-
-        for corner in &aabb.get_corners() {
-            let block = self.world.get_block(
-                corner.x.floor() as isize,
-                corner.y.floor() as isize,
-                corner.z.floor() as isize,
-            );
-
-            if block.is_some() {
-                return Some(aabb);
-            }
-        }
-
-        None
-    }
-
-    /// Updates the player's position by their velocity, checks for and
-    /// resolves any subsequent collisions, and then adds the jumping speed to
-    /// the velocity.
-    fn update_position(&mut self, dt: Duration) {
-        let (yaw_sin, yaw_cos) = self.camera.yaw.0.sin_cos();
-
-        let speed = 10.0 * (self.sprinting as i32 * 2 + 1) as f32 * dt.as_secs_f32();
-
-        let forward_speed = self.forward_pressed as i32 - self.backward_pressed as i32;
-        let forward = Vector3::new(yaw_cos, 0.0, yaw_sin) * forward_speed as f32;
-
-        let right_speed = self.right_pressed as i32 - self.left_pressed as i32;
-        let right = Vector3::new(-yaw_sin, 0.0, yaw_cos) * right_speed as f32;
-
-        let mut velocity = forward + right;
-        if velocity.magnitude2() > 1.0 {
-            velocity = velocity.normalize();
-        }
-        velocity *= speed;
-        velocity.y = self.up_speed * 10.0 * dt.as_secs_f32();
-
-        let mut new_position = self.camera.position;
-
-        // y component (jumping)
-        new_position.y += velocity.y;
-        if let Some(aabb) = self.check_collision(new_position) {
-            if self.up_speed < 0.0 {
-                new_position.y = aabb.min.y.ceil() + 1.62;
-                new_position.y = utils::f32_successor(new_position.y);
-            } else if self.up_speed > 0.0 {
-                new_position.y = aabb.max.y.floor() - 0.18;
-                new_position.y = utils::f32_predecessor(new_position.y);
-            }
-
-            self.up_speed = 0.0;
-        }
-
-        // x component
-        new_position.x += velocity.x;
-        if let Some(aabb) = self.check_collision(new_position) {
-            if velocity.x < 0.0 {
-                new_position.x = aabb.min.x.ceil() + 0.3;
-                new_position.x = utils::f32_successor(new_position.x);
-            } else if velocity.x > 0.0 {
-                new_position.x = aabb.max.x.floor() - 0.3;
-                new_position.x = utils::f32_predecessor(new_position.x);
-            }
-        }
-
-        // z component
-        new_position.z += velocity.z;
-        if let Some(aabb) = self.check_collision(new_position) {
-            if velocity.z < 0.0 {
-                new_position.z = aabb.min.z.ceil() + 0.3;
-                new_position.z = utils::f32_successor(new_position.z);
-            } else if velocity.z > 0.0 {
-                new_position.z = aabb.max.z.floor() - 0.3;
-                new_position.z = utils::f32_predecessor(new_position.z);
-            }
-        }
-
-        self.camera.position = new_position;
-
-        if !self.creative {
-            self.up_speed -= 1.6 * dt.as_secs_f32();
-            self.up_speed *= 0.98_f32.powf(dt.as_secs_f32() / 20.0);
-        }
-    }
-
     pub fn update(&mut self, dt: Duration, render_time: Duration, render_context: &RenderContext) {
-        self.update_position(dt);
+        self.player.update_position(dt, &self.world);
 
         self.world
-            .update(render_context, dt, render_time, &self.camera);
+            .update(render_context, dt, render_time, &self.player.view.camera);
 
-        self.view
-            .update_view_projection(&self.camera, &self.projection);
-        render_context.queue.write_buffer(
-            &self.view_buffer,
-            0,
-            bytemuck::cast_slice(&[self.view.to_raw()]),
-        );
+        self.player.view.update_view_projection(render_context);
 
         self.time.time += dt.as_secs_f32();
         render_context.queue.write_buffer(
@@ -505,7 +280,12 @@ impl WorldState {
     }
 
     pub fn resize(&mut self, render_context: &RenderContext, new_size: PhysicalSize<u32>) {
-        self.projection.resize(new_size.width, new_size.height);
+        // TODO Move this to View
+        self.player
+            .view
+            .projection
+            .resize(new_size.width, new_size.height);
+
         self.depth_texture = Texture::create_depth_texture(render_context, "depth_texture");
     }
 }

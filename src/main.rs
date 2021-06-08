@@ -12,6 +12,7 @@ mod vertex;
 mod view;
 mod world;
 mod utils;
+mod player;
 
 use std::time::{Duration, Instant};
 use wgpu::SwapChainError;

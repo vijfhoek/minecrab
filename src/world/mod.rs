@@ -43,6 +43,7 @@ pub const WORLD_HEIGHT: isize = 16 * 16 / CHUNK_ISIZE;
 const DEBUG_IO: bool = false;
 
 impl Renderable for World {
+    #[allow(clippy::collapsible_else_if)]
     fn update(
         &mut self,
         render_context: &RenderContext,
@@ -161,11 +162,9 @@ impl Renderable for World {
             }
         }
 
-        {
-            let buffers = self.npc.geometry_buffers.as_ref().unwrap();
-            buffers.set_buffers(render_pass);
-            triangle_count += buffers.draw_indexed(render_pass);
-        }
+        let buffers = self.npc.geometry_buffers.as_ref().unwrap();
+        buffers.apply_buffers(render_pass);
+        triangle_count += buffers.draw_indexed(render_pass);
 
         triangle_count
     }

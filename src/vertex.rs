@@ -38,11 +38,13 @@ impl Vertex for PlainVertex {
 pub struct HudVertex {
     pub position: [f32; 2],
     pub texture_coordinates: [f32; 2],
+    pub texture_index: i32,
 }
 
 const HUD_VERTEX_ATTRIBUTES: &[VertexAttribute] = &wgpu::vertex_attr_array![
     0 => Float32x2,
     1 => Float32x2,
+    2 => Sint32,
 ];
 
 impl Vertex for HudVertex {

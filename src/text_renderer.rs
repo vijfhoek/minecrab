@@ -60,7 +60,7 @@ impl TextRenderer {
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                                view_dimension: wgpu::TextureViewDimension::D2,
+                                view_dimension: wgpu::TextureViewDimension::D2Array,
                                 multisampled: false,
                             },
                             count: None,
@@ -109,10 +109,10 @@ impl TextRenderer {
 
         #[rustfmt::skip]
         let vertices = [
-            HudVertex { position: [x,      y     ], texture_coordinates: [tx,     ty    ] },
-            HudVertex { position: [x + DX, y     ], texture_coordinates: [tx + s, ty    ] },
-            HudVertex { position: [x + DX, y - DY], texture_coordinates: [tx + s, ty + s] },
-            HudVertex { position: [x,      y - DY], texture_coordinates: [tx,     ty + s] },
+            HudVertex { position: [x,      y     ], texture_coordinates: [tx,     ty    ], texture_index: 0 },
+            HudVertex { position: [x + DX, y     ], texture_coordinates: [tx + s, ty    ], texture_index: 0 },
+            HudVertex { position: [x + DX, y - DY], texture_coordinates: [tx + s, ty + s], texture_index: 0 },
+            HudVertex { position: [x,      y - DY], texture_coordinates: [tx,     ty + s], texture_index: 0 },
         ];
 
         #[rustfmt::skip]

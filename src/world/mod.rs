@@ -125,15 +125,15 @@ impl Renderable for World {
                         eprintln!("Failed to save chunk {:?}: {:?}", position, err);
                     } else {
                         if unload {
-                        self.chunks.remove(&position);
+                            self.chunks.remove(&position);
 
-                        if DEBUG_IO {
-                            println!("Saved and unloaded chunk {:?}", position);
-                        }
+                            if DEBUG_IO {
+                                println!("Saved and unloaded chunk {:?}", position);
+                            }
                         } else {
                             if DEBUG_IO {
-                        println!("Saved chunk {:?}", position);
-                    }
+                                println!("Saved chunk {:?}", position);
+                            }
                         }
                     }
                 } else {
@@ -249,7 +249,12 @@ impl World {
         }
     }
 
-    pub fn place_at_crosshair(&mut self, render_context: &RenderContext, camera: &Camera) {
+    pub fn place_at_crosshair(
+        &mut self,
+        render_context: &RenderContext,
+        camera: &Camera,
+        block_type: BlockType,
+    ) {
         if let Some((pos, face_normal)) = self.raycast(camera.position, camera.direction()) {
             let new_pos = pos.cast().unwrap() + face_normal;
 
@@ -257,9 +262,7 @@ impl World {
                 new_pos.x as isize,
                 new_pos.y as isize,
                 new_pos.z as isize,
-                Some(Block {
-                    block_type: BlockType::Cobblestone,
-                }),
+                Some(Block { block_type }),
             );
 
             self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);

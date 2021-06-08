@@ -13,7 +13,7 @@ use winit::{
 use hud_state::HudState;
 use world_state::WorldState;
 
-use crate::render_context::RenderContext;
+use crate::{render_context::RenderContext, texture::TextureManager};
 
 pub const PRIMITIVE_STATE: wgpu::PrimitiveState = wgpu::PrimitiveState {
     topology: wgpu::PrimitiveTopology::TriangleList,
@@ -96,14 +96,19 @@ impl State {
         let (swap_chain_descriptor, swap_chain) =
             Self::create_swap_chain(window, &render_adapter, &render_device, &render_surface);
 
-        let render_context = RenderContext {
+        let mut render_context = RenderContext {
             surface: render_surface,
             device: render_device,
             queue: render_queue,
 
             swap_chain_descriptor,
             swap_chain,
+            texture_manager: None,
         };
+
+        let mut texture_manager = TextureManager::new(&render_context);
+        texture_manager.load_all(&render_context).unwrap();
+        render_context.texture_manager = Some(texture_manager);
 
         let world_state = WorldState::new(&render_context);
         let hud_state = HudState::new(&render_context);
@@ -169,9 +174,11 @@ impl State {
                 button,
                 state: ElementState::Pressed,
                 ..
-            } if self.mouse_grabbed => self
-                .world_state
-                .input_mouse_button(button, &self.render_context),
+            } if self.mouse_grabbed => self.world_state.input_mouse_button(
+                button,
+                &self.render_context,
+                self.hud_state.selected_block_type(),
+            ),
 
             WindowEvent::MouseWheel {
                 delta: MouseScrollDelta::LineDelta(_, delta),
@@ -211,8 +218,12 @@ impl State {
                 .create_command_encoder(&Default::default());
 
             let mut triangle_count = 0;
-            triangle_count += self.world_state.render(&frame, &mut render_encoder);
-            triangle_count += self.hud_state.render(&frame, &mut render_encoder)?;
+            triangle_count +=
+                self.world_state
+                    .render(&self.render_context, &frame, &mut render_encoder);
+            triangle_count +=
+                self.hud_state
+                    .render(&self.render_context, &frame, &mut render_encoder)?;
 
             self.render_context
                 .queue

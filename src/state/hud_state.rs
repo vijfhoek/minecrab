@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    convert::TryInto,
+    time::{Duration, Instant},
+};
 
 use cgmath::Vector3;
 use wgpu::{BufferUsage, CommandEncoder, SwapChainTexture};
@@ -10,6 +13,7 @@ use crate::{
     text_renderer::{self, TextRenderer},
     texture::Texture,
     vertex::{HudVertex, Vertex},
+    world::block::BlockType,
 };
 
 // TODO update aspect ratio when resizing
@@ -30,7 +34,10 @@ pub struct HudState {
 
     coordinates_geometry_buffers: GeometryBuffers<u16>,
     coordinates_last: Vector3<f32>,
-    pub hotbar_cursor_position: i32,
+
+    pub hotbar_cursor_position: usize,
+    hotbar_blocks: [Option<BlockType>; 9],
+    hotbar_block_buffers: Option<GeometryBuffers<u16>>,
 }
 
 impl HudState {
@@ -55,7 +62,19 @@ impl HudState {
         let coordinates_geometry_buffers =
             text_renderer.string_to_buffers(&render_context, -0.98, 0.97 - text_renderer::DY, "");
 
-        Self {
+        let hotbar_blocks = [
+            Some(BlockType::Dirt),
+            Some(BlockType::Stone),
+            Some(BlockType::Sand),
+            None,
+            Some(BlockType::Grass),
+            None,
+            None,
+            None,
+            None,
+        ];
+
+        let mut hud_state = Self {
             texture_bind_group,
             render_pipeline,
             text_renderer,
@@ -71,7 +90,17 @@ impl HudState {
             coordinates_last: Vector3::new(0.0, 0.0, 0.0),
 
             hotbar_cursor_position: 0,
-        }
+            hotbar_blocks,
+            hotbar_block_buffers: None,
+        };
+
+        hud_state.hotbar_block_buffers = Some(GeometryBuffers::from_geometry(
+            render_context,
+            &hud_state.hotbar_block_vertices(),
+            wgpu::BufferUsage::empty(),
+        ));
+
+        hud_state
     }
 
     pub fn update(&mut self, render_context: &RenderContext, position: &Vector3<f32>) {
@@ -106,6 +135,7 @@ impl HudState {
 
     pub fn render(
         &self,
+        render_context: &RenderContext,
         frame: &SwapChainTexture,
         render_encoder: &mut CommandEncoder,
     ) -> anyhow::Result<usize> {
@@ -141,18 +171,65 @@ impl HudState {
         self.coordinates_geometry_buffers
             .draw_indexed(&mut render_pass);
 
+        // Render the blocks on the hot bar
+        let texture_manager = render_context.texture_manager.as_ref().unwrap();
+        render_pass.set_bind_group(0, texture_manager.bind_group.as_ref().unwrap(), &[]);
+        self.hotbar_block_buffers
+            .as_ref()
+            .unwrap()
+            .apply_buffers(&mut render_pass);
+        self.hotbar_block_buffers
+            .as_ref()
+            .unwrap()
+            .draw_indexed(&mut render_pass);
+
         Ok(HUD_INDICES.len() / 3)
     }
 
+    pub fn selected_block_type(&self) -> Option<BlockType> {
+        self.hotbar_blocks[self.hotbar_cursor_position]
+    }
+
+    fn hotbar_block_vertices(&self) -> Geometry<HudVertex, u16> {
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+
+        let mut index = 0;
+        for cursor_index in 0..9 {
+            if let Some(block) = self.hotbar_blocks[cursor_index as usize] {
+                let x = (-92 + 20 * cursor_index as i32) as f32;
+                let texture_index = block.texture_indices().2.try_into().unwrap();
+
+                #[rustfmt::skip]
+                vertices.extend(&[
+                    HudVertex { position: [UI_SCALE_X * (x +  5.0), -1.0 + UI_SCALE_Y * 18.0], texture_coordinates: [0.0,  0.0], texture_index },
+                    HudVertex { position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 18.0], texture_coordinates: [1.0,  0.0], texture_index },
+                    HudVertex { position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y *  4.0], texture_coordinates: [1.0,  1.0], texture_index },
+                    HudVertex { position: [UI_SCALE_X * (x +  5.0), -1.0 + UI_SCALE_Y *  4.0], texture_coordinates: [0.0,  1.0], texture_index },
+                ]);
+
+                #[rustfmt::skip]
+                indices.extend(&[
+                    index, 2 + index, 1 + index,
+                    index, 3 + index, 2 + index,
+                ]);
+                index += 4;
+            }
+        }
+
+        Geometry::new(vertices, indices)
+    }
+
     pub fn redraw_hotbar_cursor(&self, render_context: &RenderContext) {
-        let x = (-92 + 20 * self.hotbar_cursor_position) as f32;
+        let x = (-92 + 20 * self.hotbar_cursor_position as i32) as f32;
+        let texture_index = 0;
 
         #[rustfmt::skip]
         let vertices = [
-            HudVertex { position: [UI_SCALE_X * (x       ), -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [  0.0 / 256.0,  22.0 / 256.0] },
-            HudVertex { position: [UI_SCALE_X * (x + 24.0), -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [ 24.0 / 256.0,  22.0 / 256.0] },
-            HudVertex { position: [UI_SCALE_X * (x + 24.0), -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [ 24.0 / 256.0,  46.0 / 256.0] },
-            HudVertex { position: [UI_SCALE_X * (x       ), -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [  0.0 / 256.0,  46.0 / 256.0] },
+            HudVertex { position: [UI_SCALE_X * (x       ), -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [  0.0 / 256.0,  22.0 / 256.0], texture_index },
+            HudVertex { position: [UI_SCALE_X * (x + 24.0), -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [ 24.0 / 256.0,  22.0 / 256.0], texture_index },
+            HudVertex { position: [UI_SCALE_X * (x + 24.0), -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [ 24.0 / 256.0,  46.0 / 256.0], texture_index },
+            HudVertex { position: [UI_SCALE_X * (x       ), -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [  0.0 / 256.0,  46.0 / 256.0], texture_index },
         ];
 
         render_context.queue.write_buffer(
@@ -162,13 +239,14 @@ impl HudState {
         );
     }
 
-    pub fn set_hotbar_cursor(&mut self, render_context: &RenderContext, i: i32) {
+    pub fn set_hotbar_cursor(&mut self, render_context: &RenderContext, i: usize) {
         self.hotbar_cursor_position = i;
         self.redraw_hotbar_cursor(render_context);
     }
 
     pub fn move_hotbar_cursor(&mut self, render_context: &RenderContext, delta: i32) {
-        self.hotbar_cursor_position = (self.hotbar_cursor_position + delta).rem_euclid(9);
+        self.hotbar_cursor_position =
+            (self.hotbar_cursor_position as i32 + delta).rem_euclid(9) as usize;
         self.redraw_hotbar_cursor(render_context);
     }
 
@@ -208,7 +286,7 @@ impl HudState {
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                                view_dimension: wgpu::TextureViewDimension::D2,
+                                view_dimension: wgpu::TextureViewDimension::D2Array,
                                 multisampled: false,
                             },
                             count: None,
@@ -286,22 +364,22 @@ impl HudState {
 #[rustfmt::skip]
 pub const HUD_VERTICES: [HudVertex; 12] = [
     // Crosshair
-    HudVertex { position: [UI_SCALE_X *  -8.0,        UI_SCALE_Y *  8.0], texture_coordinates: [240.0 / 256.0,   0.0 / 256.0] },
-    HudVertex { position: [UI_SCALE_X *   8.0,        UI_SCALE_Y *  8.0], texture_coordinates: [  1.0,           0.0 / 256.0] },
-    HudVertex { position: [UI_SCALE_X *   8.0,        UI_SCALE_Y * -8.0], texture_coordinates: [  1.0,          16.0 / 256.0] },
-    HudVertex { position: [UI_SCALE_X *  -8.0,        UI_SCALE_Y * -8.0], texture_coordinates: [240.0 / 256.0,  16.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X *  -8.0,        UI_SCALE_Y *  8.0], texture_coordinates: [240.0 / 256.0,   0.0 / 256.0], texture_index: 0 },
+    HudVertex { position: [UI_SCALE_X *   8.0,        UI_SCALE_Y *  8.0], texture_coordinates: [  1.0,           0.0 / 256.0], texture_index: 0 },
+    HudVertex { position: [UI_SCALE_X *   8.0,        UI_SCALE_Y * -8.0], texture_coordinates: [  1.0,          16.0 / 256.0], texture_index: 0 },
+    HudVertex { position: [UI_SCALE_X *  -8.0,        UI_SCALE_Y * -8.0], texture_coordinates: [240.0 / 256.0,  16.0 / 256.0], texture_index: 0 },
 
     // Hotbar
-    HudVertex { position: [UI_SCALE_X * -91.0, -1.0 + UI_SCALE_Y * 22.0], texture_coordinates: [  0.0 / 256.0,   0.0 / 256.0] },
-    HudVertex { position: [UI_SCALE_X *  91.0, -1.0 + UI_SCALE_Y * 22.0], texture_coordinates: [182.0 / 256.0,   0.0 / 256.0] },
-    HudVertex { position: [UI_SCALE_X *  91.0, -1.0                    ], texture_coordinates: [182.0 / 256.0,  22.0 / 256.0] },
-    HudVertex { position: [UI_SCALE_X * -91.0, -1.0                    ], texture_coordinates: [  0.0 / 256.0,  22.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X * -91.0, -1.0 + UI_SCALE_Y * 22.0], texture_coordinates: [  0.0 / 256.0,   0.0 / 256.0], texture_index: 0 },
+    HudVertex { position: [UI_SCALE_X *  91.0, -1.0 + UI_SCALE_Y * 22.0], texture_coordinates: [182.0 / 256.0,   0.0 / 256.0], texture_index: 0 },
+    HudVertex { position: [UI_SCALE_X *  91.0, -1.0                    ], texture_coordinates: [182.0 / 256.0,  22.0 / 256.0], texture_index: 0 },
+    HudVertex { position: [UI_SCALE_X * -91.0, -1.0                    ], texture_coordinates: [  0.0 / 256.0,  22.0 / 256.0], texture_index: 0 },
 
     // Hotbar cursor
-    HudVertex { position: [UI_SCALE_X * -92.0, -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [  0.0 / 256.0,  22.0 / 256.0] },
-    HudVertex { position: [UI_SCALE_X * -68.0, -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [ 24.0 / 256.0,  22.0 / 256.0] },
-    HudVertex { position: [UI_SCALE_X * -68.0, -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [ 24.0 / 256.0,  46.0 / 256.0] },
-    HudVertex { position: [UI_SCALE_X * -92.0, -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [  0.0 / 256.0,  46.0 / 256.0] },
+    HudVertex { position: [UI_SCALE_X * -92.0, -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [  0.0 / 256.0,  22.0 / 256.0], texture_index: 0 },
+    HudVertex { position: [UI_SCALE_X * -68.0, -1.0 + UI_SCALE_Y * 23.0], texture_coordinates: [ 24.0 / 256.0,  22.0 / 256.0], texture_index: 0 },
+    HudVertex { position: [UI_SCALE_X * -68.0, -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [ 24.0 / 256.0,  46.0 / 256.0], texture_index: 0 },
+    HudVertex { position: [UI_SCALE_X * -92.0, -1.0 + UI_SCALE_Y * -1.0], texture_coordinates: [  0.0 / 256.0,  46.0 / 256.0], texture_index: 0 },
 ];
 
 #[rustfmt::skip]

@@ -15,12 +15,12 @@ use crate::{
     camera::{Camera, Projection},
     render_context::RenderContext,
     renderable::Renderable,
-    texture::{Texture, TextureManager},
+    texture::Texture,
     time::Time,
     utils,
     vertex::{BlockVertex, Vertex},
     view::View,
-    world::World,
+    world::{block::BlockType, World},
 };
 
 pub struct WorldState {
@@ -28,7 +28,6 @@ pub struct WorldState {
     pub view: View,
     pub view_buffer: wgpu::Buffer,
     pub view_bind_group: wgpu::BindGroup,
-    pub texture_manager: TextureManager,
     pub camera: Camera,
     pub projection: Projection,
     pub depth_texture: Texture,
@@ -52,12 +51,6 @@ pub struct WorldState {
 }
 
 impl WorldState {
-    fn create_textures(render_context: &RenderContext) -> TextureManager {
-        let mut texture_manager = TextureManager::new(&render_context);
-        texture_manager.load_all(render_context).unwrap();
-        texture_manager
-    }
-
     fn create_camera(render_context: &RenderContext) -> (Camera, Projection) {
         let camera = Camera::new(
             (10.0, 140.0, 10.0).into(),
@@ -226,8 +219,6 @@ impl WorldState {
     }
 
     pub fn new(render_context: &RenderContext) -> WorldState {
-        let texture_manager = Self::create_textures(render_context);
-
         let (camera, projection) = Self::create_camera(render_context);
 
         let (view, view_buffer, view_bind_group_layout, view_bind_group) =
@@ -246,6 +237,7 @@ impl WorldState {
             }),
         );
 
+        let texture_manager = render_context.texture_manager.as_ref().unwrap();
         let render_pipeline_layout =
             render_context
                 .device
@@ -267,7 +259,6 @@ impl WorldState {
             view,
             view_buffer,
             view_bind_group,
-            texture_manager,
             camera,
             projection,
             depth_texture,
@@ -292,7 +283,12 @@ impl WorldState {
         }
     }
 
-    pub fn render(&self, frame: &SwapChainTexture, render_encoder: &mut CommandEncoder) -> usize {
+    pub fn render(
+        &self,
+        render_context: &RenderContext,
+        frame: &SwapChainTexture,
+        render_encoder: &mut CommandEncoder,
+    ) -> usize {
         let mut triangle_count = 0;
 
         let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -322,8 +318,8 @@ impl WorldState {
 
         render_pass.set_pipeline(&self.render_pipeline);
 
-        let tm = &self.texture_manager;
-        render_pass.set_bind_group(0, tm.bind_group.as_ref().unwrap(), &[]);
+        let texture_manager = render_context.texture_manager.as_ref().unwrap();
+        render_pass.set_bind_group(0, texture_manager.bind_group.as_ref().unwrap(), &[]);
         render_pass.set_bind_group(1, &self.view_bind_group, &[]);
         render_pass.set_bind_group(2, &self.time_bind_group, &[]);
 
@@ -344,11 +340,19 @@ impl WorldState {
         }
     }
 
-    pub fn input_mouse_button(&mut self, button: &MouseButton, render_context: &RenderContext) {
+    pub fn input_mouse_button(
+        &mut self,
+        button: &MouseButton,
+        render_context: &RenderContext,
+        selected: Option<BlockType>,
+    ) {
         if button == &MouseButton::Left {
             self.world.break_at_crosshair(render_context, &self.camera);
         } else if button == &MouseButton::Right {
-            self.world.place_at_crosshair(render_context, &self.camera);
+            if let Some(selected) = selected {
+                self.world
+                    .place_at_crosshair(render_context, &self.camera, selected);
+            }
         }
     }
 

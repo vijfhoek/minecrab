@@ -102,7 +102,7 @@ impl Texture {
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some(&format!("texture_view_{}", label)),
-            dimension: Some(wgpu::TextureViewDimension::D2),
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
             ..wgpu::TextureViewDescriptor::default()
         });
 

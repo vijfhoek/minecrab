@@ -28,14 +28,12 @@ pub const PRIMITIVE_STATE: wgpu::PrimitiveState = wgpu::PrimitiveState {
 
 pub struct State {
     pub window_size: PhysicalSize<u32>,
+    pub mouse_grabbed: bool,
     render_context: RenderContext,
 
-    pub mouse_grabbed: bool,
-
-    pub hud: Hud,
-
     pub world: World,
-    pub player: Player,
+    player: Player,
+    hud: Hud,
 }
 
 impl State {
@@ -117,13 +115,12 @@ impl State {
 
         Self {
             window_size: window.inner_size(),
+            mouse_grabbed: false,
             render_context,
 
-            mouse_grabbed: false,
-
-            hud,
-            player,
             world,
+            player,
+            hud,
         }
     }
 

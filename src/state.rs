@@ -1,16 +1,20 @@
-pub mod world_state;
-
 use std::time::{Duration, Instant};
 
 use winit::{
     dpi::PhysicalSize,
-    event::{DeviceEvent, ElementState, MouseScrollDelta, VirtualKeyCode, WindowEvent},
+    event::{
+        DeviceEvent, ElementState, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
+    },
     window::Window,
 };
 
-use world_state::WorldState;
-
-use crate::{hud::Hud, render_context::RenderContext, texture::TextureManager};
+use crate::{
+    hud::Hud,
+    player::Player,
+    render_context::RenderContext,
+    texture::{Texture, TextureManager},
+    world::World,
+};
 
 pub const PRIMITIVE_STATE: wgpu::PrimitiveState = wgpu::PrimitiveState {
     topology: wgpu::PrimitiveTopology::TriangleList,
@@ -25,11 +29,13 @@ pub const PRIMITIVE_STATE: wgpu::PrimitiveState = wgpu::PrimitiveState {
 pub struct State {
     pub window_size: PhysicalSize<u32>,
     render_context: RenderContext,
-    pub world_state: WorldState,
 
     pub mouse_grabbed: bool,
 
     pub hud: Hud,
+
+    pub world: World,
+    pub player: Player,
 }
 
 impl State {
@@ -85,8 +91,6 @@ impl State {
     }
 
     pub async fn new(window: &Window) -> State {
-        let window_size = window.inner_size();
-
         let (render_surface, render_adapter, render_device, render_queue) =
             Self::create_render_device(window).await;
 
@@ -107,29 +111,31 @@ impl State {
         texture_manager.load_all(&render_context).unwrap();
         render_context.texture_manager = Some(texture_manager);
 
-        let world_state = WorldState::new(&render_context);
-
         let hud = Hud::new(&render_context);
+        let player = Player::new(&render_context);
+        let world = World::new(&render_context, &player.view);
 
         Self {
-            window_size,
+            window_size: window.inner_size(),
             render_context,
-
-            world_state,
 
             mouse_grabbed: false,
 
             hud,
+            player,
+            world,
         }
     }
 
-    pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
-        println!("resizing to {:?}", new_size);
-        self.window_size = new_size;
-        self.render_context.swap_chain_descriptor.width = new_size.width;
-        self.render_context.swap_chain_descriptor.height = new_size.height;
+    pub fn resize(&mut self, size: PhysicalSize<u32>) {
+        println!("resizing to {:?}", size);
+        self.window_size = size;
+        self.render_context.swap_chain_descriptor.width = size.width;
+        self.render_context.swap_chain_descriptor.height = size.height;
 
-        self.world_state.resize(&self.render_context, new_size);
+        self.player.view.projection.resize(size.width, size.height);
+        self.world.depth_texture =
+            Texture::create_depth_texture(&self.render_context, "depth_texture");
 
         self.render_context.swap_chain = self.render_context.device.create_swap_chain(
             &self.render_context.surface,
@@ -144,27 +150,53 @@ impl State {
     }
 
     fn input_keyboard(&mut self, key_code: VirtualKeyCode, state: ElementState) {
-        if state == ElementState::Pressed {
-            match key_code {
-                VirtualKeyCode::Key1 => self.set_hotbar_cursor(0),
-                VirtualKeyCode::Key2 => self.set_hotbar_cursor(1),
-                VirtualKeyCode::Key3 => self.set_hotbar_cursor(2),
-                VirtualKeyCode::Key4 => self.set_hotbar_cursor(3),
-                VirtualKeyCode::Key5 => self.set_hotbar_cursor(4),
-                VirtualKeyCode::Key6 => self.set_hotbar_cursor(5),
-                VirtualKeyCode::Key7 => self.set_hotbar_cursor(6),
-                VirtualKeyCode::Key8 => self.set_hotbar_cursor(7),
-                VirtualKeyCode::Key9 => self.set_hotbar_cursor(8),
-                _ => self.world_state.input_keyboard(key_code, state),
+        let pressed = state == ElementState::Pressed;
+
+        match key_code {
+            VirtualKeyCode::F2 if pressed => self.player.creative ^= true,
+
+            // Hotbar
+            VirtualKeyCode::Key1 if pressed => self.set_hotbar_cursor(0),
+            VirtualKeyCode::Key2 if pressed => self.set_hotbar_cursor(1),
+            VirtualKeyCode::Key3 if pressed => self.set_hotbar_cursor(2),
+            VirtualKeyCode::Key4 if pressed => self.set_hotbar_cursor(3),
+            VirtualKeyCode::Key5 if pressed => self.set_hotbar_cursor(4),
+            VirtualKeyCode::Key6 if pressed => self.set_hotbar_cursor(5),
+            VirtualKeyCode::Key7 if pressed => self.set_hotbar_cursor(6),
+            VirtualKeyCode::Key8 if pressed => self.set_hotbar_cursor(7),
+            VirtualKeyCode::Key9 if pressed => self.set_hotbar_cursor(8),
+
+            // Movement
+            VirtualKeyCode::W => self.player.forward_pressed = pressed,
+            VirtualKeyCode::S => self.player.backward_pressed = pressed,
+            VirtualKeyCode::A => self.player.left_pressed = pressed,
+            VirtualKeyCode::D => self.player.right_pressed = pressed,
+            VirtualKeyCode::Space => {
+                self.player.up_speed = match (pressed, self.player.creative) {
+                    // Creative
+                    (true, true) => 1.0,
+                    (false, true) => 0.0,
+
+                    // Not creative
+                    (true, false) => {
+                        // TODO Don't allow player to jump in mid-air
+                        0.6
+                    }
+                    (false, false) => self.player.up_speed,
+                };
             }
-        } else {
-            self.world_state.input_keyboard(key_code, state)
+            VirtualKeyCode::LShift if self.player.creative => {
+                self.player.up_speed = if pressed { -1.0 } else { 0.0 }
+            }
+            VirtualKeyCode::LControl => self.player.sprinting = pressed,
+
+            _ => (),
         }
     }
 
     fn input_mouse(&mut self, dx: f64, dy: f64) {
         if self.mouse_grabbed {
-            self.world_state.player.update_camera(dx, dy);
+            self.player.update_camera(dx, dy);
         }
     }
 
@@ -178,11 +210,20 @@ impl State {
                 button,
                 state: ElementState::Pressed,
                 ..
-            } if self.mouse_grabbed => self.world_state.input_mouse_button(
-                button,
-                &self.render_context,
-                None, // TODO
-            ),
+            } if self.mouse_grabbed => {
+                if button == &MouseButton::Left {
+                    self.world
+                        .break_at_crosshair(&self.render_context, &self.player.view.camera);
+                } else if button == &MouseButton::Right {
+                    if let Some(selected) = self.hud.selected_block() {
+                        self.world.place_at_crosshair(
+                            &self.render_context,
+                            &self.player.view.camera,
+                            selected,
+                        );
+                    }
+                }
+            }
 
             WindowEvent::MouseWheel {
                 delta: MouseScrollDelta::LineDelta(_, delta),
@@ -203,11 +244,14 @@ impl State {
     }
 
     pub fn update(&mut self, dt: Duration, render_time: Duration) {
-        self.world_state
-            .update(dt, render_time, &self.render_context);
+        self.player.update_position(dt, &self.world);
 
-        self.hud
-            .update(&self.render_context, &self.world_state.player.view.camera)
+        let view = &mut self.player.view;
+        view.update_view_projection(&self.render_context);
+
+        self.world
+            .update(&self.render_context, dt, render_time, &view.camera);
+        self.hud.update(&self.render_context, &view.camera);
     }
 
     pub fn render(&mut self) -> anyhow::Result<(usize, Duration)> {
@@ -221,9 +265,13 @@ impl State {
             .create_command_encoder(&Default::default());
 
         let mut triangle_count = 0;
-        triangle_count +=
-            self.world_state
-                .render(&self.render_context, &frame, &mut render_encoder);
+
+        triangle_count += self.world.render(
+            &self.render_context,
+            &mut render_encoder,
+            &frame,
+            &self.player.view,
+        );
 
         triangle_count += self
             .hud

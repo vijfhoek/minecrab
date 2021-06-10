@@ -21,7 +21,7 @@ use serde::{
     ser::SerializeSeq,
     Deserialize, Serialize, Serializer,
 };
-use wgpu::BufferUsage;
+use wgpu::{BufferUsage, RenderPass};
 
 pub const CHUNK_SIZE: usize = 32;
 pub const CHUNK_ISIZE: isize = CHUNK_SIZE as isize;
@@ -93,6 +93,25 @@ impl<'de> Deserialize<'de> for Chunk {
 }
 
 impl Chunk {
+    pub fn render<'a>(
+        &'a self,
+        render_pass: &mut RenderPass<'a>,
+        position: &Point3<isize>,
+        view: &View,
+    ) -> usize {
+        if !self.is_visible(position * CHUNK_ISIZE, &view) {
+            // Frustrum culling
+            0
+        } else if let Some(buffers) = &self.buffers {
+            buffers.apply_buffers(render_pass);
+            buffers.draw_indexed(render_pass)
+        } else {
+            // Not loaded
+            println!("Trying to render non-loaded chunk {:?}", position);
+            0
+        }
+    }
+
     pub fn generate(&mut self, chunk_x: isize, chunk_y: isize, chunk_z: isize) {
         let fbm = noise::Fbm::new();
 

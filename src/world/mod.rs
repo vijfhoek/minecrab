@@ -1,6 +1,7 @@
 pub mod block;
 pub mod chunk;
 pub mod face_flags;
+pub mod npc;
 pub mod quad;
 
 use std::{
@@ -10,19 +11,32 @@ use std::{
 
 use crate::{
     camera::Camera,
-    npc::Npc,
     render_context::RenderContext,
+    texture::Texture,
+    time::Time,
+    vertex::{BlockVertex, Vertex},
     view::View,
     world::{
         block::{Block, BlockType},
         chunk::{Chunk, CHUNK_ISIZE},
+        npc::Npc,
     },
 };
 use ahash::AHashMap;
 use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3};
-use wgpu::RenderPass;
+use wgpu::{
+    util::{BufferInitDescriptor, DeviceExt},
+    BindGroup, Buffer, CommandEncoder, RenderPipeline, SwapChainTexture,
+};
 
 pub struct World {
+    pub render_pipeline: RenderPipeline,
+    pub depth_texture: Texture,
+
+    pub time: Time,
+    pub time_buffer: Buffer,
+    pub time_bind_group: BindGroup,
+
     pub npc: Npc,
 
     pub chunks: AHashMap<Point3<isize>, Chunk>,
@@ -50,6 +64,13 @@ impl World {
         render_time: Duration,
         camera: &Camera,
     ) {
+        self.time.time += dt.as_secs_f32();
+        render_context.queue.write_buffer(
+            &self.time_buffer,
+            0,
+            &bytemuck::cast_slice(&[self.time]),
+        );
+
         self.update_highlight(render_context, camera);
 
         // Queue up new chunks for loading, if necessary
@@ -147,33 +168,58 @@ impl World {
         }
     }
 
-    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, view: &View) -> usize {
+    pub fn render<'a>(
+        &'a self,
+        render_context: &RenderContext,
+        render_encoder: &mut CommandEncoder,
+        frame: &SwapChainTexture,
+        view: &View,
+    ) -> usize {
+        let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("render_pass"),
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: &frame.view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.502,
+                        g: 0.663,
+                        b: 0.965,
+                        a: 1.0,
+                    }),
+                    store: true,
+                },
+            }],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.depth_texture.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
+        });
+        render_pass.set_pipeline(&self.render_pipeline);
+
+        let texture_manager = render_context.texture_manager.as_ref().unwrap();
+        render_pass.set_bind_group(0, texture_manager.bind_group.as_ref().unwrap(), &[]);
+        render_pass.set_bind_group(1, &view.bind_group, &[]);
+        render_pass.set_bind_group(2, &self.time_bind_group, &[]);
+
         let mut triangle_count = 0;
 
         for (position, chunk) in &self.chunks {
-            // TODO Reimplement frustrum culling
-            if !chunk.is_visible(position * CHUNK_ISIZE, &view) {
-                continue;
-            }
-
-            if let Some(buffers) = chunk.buffers.as_ref() {
-                buffers.apply_buffers(render_pass);
-                triangle_count += buffers.draw_indexed(render_pass);
-            }
+            triangle_count += chunk.render(&mut render_pass, position, view);
         }
 
-        let buffers = self.npc.geometry_buffers.as_ref().unwrap();
-        buffers.apply_buffers(render_pass);
-        triangle_count += buffers.draw_indexed(render_pass);
+        triangle_count += self.npc.render(&mut render_pass);
 
         triangle_count
     }
-}
 
-impl World {
-    pub fn new(render_context: &RenderContext) -> Self {
+    pub fn new(render_context: &RenderContext, view: &View) -> Self {
         let chunks = AHashMap::new();
-        let mut npc = Npc::load();
+        let mut npc = Npc::new();
         npc.load_geometry(render_context);
 
         let chunk_database = sled::Config::new()
@@ -183,10 +229,118 @@ impl World {
             .open()
             .unwrap();
 
+        let time = Time::new();
+
+        let time_buffer = render_context
+            .device
+            .create_buffer_init(&BufferInitDescriptor {
+                label: Some("time_buffer"),
+                contents: bytemuck::cast_slice(&[time]),
+                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            });
+
+        let time_bind_group_layout =
+            render_context
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                    label: Some("time_bind_group_layout"),
+                });
+
+        let time_bind_group = render_context
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &time_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: time_buffer.as_entire_binding(),
+                }],
+                label: Some("time_bind_group"),
+            });
+
+        let texture_manager = render_context.texture_manager.as_ref().unwrap();
+        let render_pipeline_layout =
+            render_context
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("render_pipeline_layout"),
+                    push_constant_ranges: &[],
+                    bind_group_layouts: &[
+                        &texture_manager.bind_group_layout,
+                        &view.bind_group_layout,
+                        &time_bind_group_layout,
+                    ],
+                });
+
+        let shader = render_context.device.create_shader_module(
+            &(wgpu::ShaderModuleDescriptor {
+                label: Some("shader"),
+                flags: wgpu::ShaderFlags::all(),
+                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/world.wgsl").into()),
+            }),
+        );
+
+        let render_pipeline =
+            render_context
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("Render Pipeline"),
+                    layout: Some(&render_pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader,
+                        entry_point: "main",
+                        buffers: &[BlockVertex::descriptor()],
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader,
+                        entry_point: "main",
+                        targets: &[wgpu::ColorTargetState {
+                            format: render_context.swap_chain_descriptor.format,
+                            blend: Some(wgpu::BlendState {
+                                alpha: wgpu::BlendComponent::REPLACE,
+                                color: wgpu::BlendComponent::REPLACE,
+                            }),
+                            write_mask: wgpu::ColorWrite::ALL,
+                        }],
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        cull_mode: Some(wgpu::Face::Back),
+                        polygon_mode: wgpu::PolygonMode::Fill,
+                        ..Default::default()
+                    },
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: Texture::DEPTH_FORMAT,
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::Less,
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    multisample: wgpu::MultisampleState::default(),
+                });
+
+        let depth_texture = Texture::create_depth_texture(render_context, "depth_texture");
+
         Self {
-            chunks,
+            render_pipeline,
+
+            time,
+            time_buffer,
+            time_bind_group,
+
+            depth_texture,
+
             npc,
 
+            chunks,
             chunk_database,
             chunk_load_queue: VecDeque::new(),
             chunk_save_queue: VecDeque::new(),

@@ -2,7 +2,7 @@ extern crate gltf;
 extern crate wgpu;
 
 use cgmath::Vector3;
-use wgpu::BufferUsage;
+use wgpu::{BufferUsage, RenderPass};
 
 use crate::{
     geometry::{Geometry, GeometryBuffers},
@@ -19,7 +19,7 @@ pub struct Npc {
 }
 
 impl Npc {
-    pub fn load() -> Self {
+    pub fn new() -> Self {
         let position: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
         let scale: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
         let rotation: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
@@ -70,5 +70,11 @@ impl Npc {
             &self.geometry,
             BufferUsage::empty(),
         ));
+    }
+
+    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>) -> usize {
+        let buffers = self.geometry_buffers.as_ref().unwrap();
+        buffers.apply_buffers(render_pass);
+        buffers.draw_indexed(render_pass)
     }
 }

@@ -12,7 +12,7 @@ use crate::{
 pub struct WidgetsHud {
     texture_bind_group: BindGroup,
     geometry_buffers: GeometryBuffers<u16>,
-    hotbar_cursor_position: usize,
+    pub hotbar_cursor_position: usize,
 }
 
 impl WidgetsHud {

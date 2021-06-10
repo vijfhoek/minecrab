@@ -4,6 +4,7 @@ use crate::{
     render_context::RenderContext,
     state::PRIMITIVE_STATE,
     vertex::{HudVertex, Vertex},
+    world::block::BlockType,
 };
 
 use self::{debug_hud::DebugHud, hotbar_hud::HotbarHud, widgets_hud::WidgetsHud};
@@ -137,5 +138,10 @@ impl Hud {
         self.widgets_hud.render(&mut render_pass)
             + self.debug_hud.render(&mut render_pass)
             + self.hotbar_hud.render(render_context, &mut render_pass)
+    }
+
+    pub fn selected_block(&self) -> Option<BlockType> {
+        // TODO The hotbar widget should be rendered by HotbarHud
+        self.hotbar_hud.blocks[self.widgets_hud.hotbar_cursor_position]
     }
 }

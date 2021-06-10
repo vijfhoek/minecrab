@@ -25,7 +25,7 @@ impl HotbarHud {
             Some(BlockType::Sand),
             None,
             Some(BlockType::Grass),
-            None,
+            Some(BlockType::Cobblestone),
             None,
             None,
             None,

@@ -2,7 +2,6 @@ mod aabb;
 mod camera;
 mod geometry;
 mod hud;
-mod npc;
 mod player;
 mod render_context;
 mod state;
@@ -148,7 +147,7 @@ fn main() {
                     println!(
                         "{:>8} tris | {:>5} chunks",
                         triangle_count,
-                        state.world_state.world.chunks.len()
+                        state.world.chunks.len()
                     );
 
                     elapsed = Duration::from_secs(0);

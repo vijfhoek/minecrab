@@ -16,16 +16,6 @@ use crate::{
     world::World,
 };
 
-pub const PRIMITIVE_STATE: wgpu::PrimitiveState = wgpu::PrimitiveState {
-    topology: wgpu::PrimitiveTopology::TriangleList,
-    strip_index_format: None,
-    front_face: wgpu::FrontFace::Ccw,
-    cull_mode: None,
-    clamp_depth: false,
-    polygon_mode: wgpu::PolygonMode::Fill,
-    conservative: false,
-};
-
 pub struct State {
     pub window_size: PhysicalSize<u32>,
     pub mouse_grabbed: bool,
@@ -175,11 +165,8 @@ impl State {
                     (false, true) => 0.0,
 
                     // Not creative
-                    (true, false) => {
-                        // TODO Don't allow player to jump in mid-air
-                        0.6
-                    }
-                    (false, false) => self.player.up_speed,
+                    (true, false) if self.player.grounded => 0.6,
+                    _ => self.player.up_speed,
                 };
             }
             VirtualKeyCode::LShift if self.player.creative => {

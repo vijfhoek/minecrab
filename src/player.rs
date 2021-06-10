@@ -6,6 +6,7 @@ use crate::{aabb::Aabb, render_context::RenderContext, utils, view::View, world:
 
 pub struct Player {
     pub sprinting: bool,
+    pub grounded: bool,
     pub creative: bool,
 
     pub forward_pressed: bool,
@@ -23,13 +24,16 @@ impl Player {
 
         Self {
             sprinting: false,
+            grounded: false,
             creative: false,
-            view,
+
             forward_pressed: false,
             backward_pressed: false,
             left_pressed: false,
             right_pressed: false,
             up_speed: 0.0,
+
+            view,
         }
     }
 
@@ -81,6 +85,9 @@ impl Player {
             }
 
             self.up_speed = 0.0;
+            self.grounded = true;
+        } else {
+            self.grounded = false;
         }
 
         // x component

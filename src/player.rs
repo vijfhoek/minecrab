@@ -73,53 +73,54 @@ impl Player {
 
         let mut new_position = self.view.camera.position;
 
-        // y component (jumping)
-        new_position.y += velocity.y;
-        if let Some(aabb) = self.check_collision(new_position, world) {
-            if self.up_speed < 0.0 {
-                new_position.y = aabb.min.y.ceil() + 1.62;
-                new_position.y = utils::f32_successor(new_position.y);
-            } else if self.up_speed > 0.0 {
-                new_position.y = aabb.max.y.floor() - 0.18;
-                new_position.y = utils::f32_predecessor(new_position.y);
-            }
-
-            self.up_speed = 0.0;
-            self.grounded = true;
-        } else {
-            self.grounded = false;
-        }
-
-        // x component
-        new_position.x += velocity.x;
-        if let Some(aabb) = self.check_collision(new_position, world) {
-            if velocity.x < 0.0 {
-                new_position.x = aabb.min.x.ceil() + 0.3;
-                new_position.x = utils::f32_successor(new_position.x);
-            } else if velocity.x > 0.0 {
-                new_position.x = aabb.max.x.floor() - 0.3;
-                new_position.x = utils::f32_predecessor(new_position.x);
-            }
-        }
-
-        // z component
-        new_position.z += velocity.z;
-        if let Some(aabb) = self.check_collision(new_position, world) {
-            if velocity.z < 0.0 {
-                new_position.z = aabb.min.z.ceil() + 0.3;
-                new_position.z = utils::f32_successor(new_position.z);
-            } else if velocity.z > 0.0 {
-                new_position.z = aabb.max.z.floor() - 0.3;
-                new_position.z = utils::f32_predecessor(new_position.z);
-            }
-        }
-
-        self.view.camera.position = new_position;
-
         if !self.creative {
+            // y component (jumping)
+            new_position.y += velocity.y;
+            if let Some(aabb) = self.check_collision(new_position, world) {
+                if self.up_speed < 0.0 {
+                    new_position.y = aabb.min.y.ceil() + 1.62;
+                    new_position.y = utils::f32_successor(new_position.y);
+                } else if self.up_speed > 0.0 {
+                    new_position.y = aabb.max.y.floor() - 0.18;
+                    new_position.y = utils::f32_predecessor(new_position.y);
+                }
+
+                self.up_speed = 0.0;
+                self.grounded = true;
+            } else if self.up_speed.abs() > 0.05 {
+                self.grounded = false;
+            }
+
+            // x component
+            new_position.x += velocity.x;
+            if let Some(aabb) = self.check_collision(new_position, world) {
+                if velocity.x < 0.0 {
+                    new_position.x = aabb.min.x.ceil() + 0.3;
+                    new_position.x = utils::f32_successor(new_position.x);
+                } else if velocity.x > 0.0 {
+                    new_position.x = aabb.max.x.floor() - 0.3;
+                    new_position.x = utils::f32_predecessor(new_position.x);
+                }
+            }
+
+            // z component
+            new_position.z += velocity.z;
+            if let Some(aabb) = self.check_collision(new_position, world) {
+                if velocity.z < 0.0 {
+                    new_position.z = aabb.min.z.ceil() + 0.3;
+                    new_position.z = utils::f32_successor(new_position.z);
+                } else if velocity.z > 0.0 {
+                    new_position.z = aabb.max.z.floor() - 0.3;
+                    new_position.z = utils::f32_predecessor(new_position.z);
+                }
+            }
+
             self.up_speed -= 1.6 * dt.as_secs_f32();
             self.up_speed *= 0.98_f32.powf(dt.as_secs_f32() / 20.0);
+        } else {
+            new_position += velocity;
         }
+        self.view.camera.position = new_position;
     }
 
     fn check_collision(&self, position: Point3<f32>, world: &World) -> Option<Aabb> {

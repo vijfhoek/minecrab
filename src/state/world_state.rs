@@ -12,7 +12,6 @@ use winit::{
 use crate::{
     player::Player,
     render_context::RenderContext,
-    renderable::Renderable,
     texture::Texture,
     time::Time,
     vertex::{BlockVertex, Vertex},
@@ -123,8 +122,7 @@ impl WorldState {
         let (time, time_buffer, time_layout, time_bind_group) = Self::create_time(render_context);
         let player = Player::new(render_context);
 
-        let mut world = World::new();
-        world.npc.load_geometry(render_context);
+        let world = World::new(render_context);
 
         let shader = render_context.device.create_shader_module(
             &(wgpu::ShaderModuleDescriptor {
@@ -196,7 +194,6 @@ impl WorldState {
                 stencil_ops: None,
             }),
         });
-
         render_pass.set_pipeline(&self.render_pipeline);
 
         let texture_manager = render_context.texture_manager.as_ref().unwrap();
@@ -236,24 +233,18 @@ impl WorldState {
             VirtualKeyCode::D => self.player.right_pressed = pressed,
             VirtualKeyCode::F2 if pressed => self.player.creative ^= true,
             VirtualKeyCode::Space => {
-                // TODO aaaaaaaaaaaaaaaaaa
-                self.player.up_speed = if pressed {
-                    if self.player.creative {
-                        1.0
-                    } else {
-                        if self.player.up_speed.abs() < 0.05 {
-                            0.6
-                        } else {
-                            self.player.up_speed
-                        }
+                self.player.up_speed = match (pressed, self.player.creative) {
+                    // Creative
+                    (true, true) => 1.0,
+                    (false, true) => 0.0,
+
+                    // Not creative
+                    (true, false) => {
+                        // TODO Don't allow player to jump in mid-air
+                        0.6
                     }
-                } else {
-                    if self.player.creative {
-                        0.0
-                    } else {
-                        self.player.up_speed
-                    }
-                }
+                    (false, false) => self.player.up_speed,
+                };
             }
             VirtualKeyCode::LShift if self.player.creative => {
                 self.player.up_speed = if pressed { -1.0 } else { 0.0 }

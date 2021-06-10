@@ -1,18 +1,18 @@
 mod aabb;
 mod camera;
 mod geometry;
+mod hud;
 mod npc;
+mod player;
 mod render_context;
-mod renderable;
 mod state;
 mod text_renderer;
 mod texture;
 mod time;
+mod utils;
 mod vertex;
 mod view;
 mod world;
-mod utils;
-mod player;
 
 use std::time::{Duration, Instant};
 use wgpu::SwapChainError;

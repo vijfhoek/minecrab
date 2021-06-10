@@ -12,7 +12,6 @@ use crate::{
     camera::Camera,
     npc::Npc,
     render_context::RenderContext,
-    renderable::Renderable,
     view::View,
     world::{
         block::{Block, BlockType},
@@ -42,9 +41,9 @@ pub const WORLD_HEIGHT: isize = 16 * 16 / CHUNK_ISIZE;
 
 const DEBUG_IO: bool = false;
 
-impl Renderable for World {
+impl World {
     #[allow(clippy::collapsible_else_if)]
-    fn update(
+    pub fn update(
         &mut self,
         render_context: &RenderContext,
         dt: Duration,
@@ -148,10 +147,11 @@ impl Renderable for World {
         }
     }
 
-    fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, view: &View) -> usize {
+    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, view: &View) -> usize {
         let mut triangle_count = 0;
 
         for (position, chunk) in &self.chunks {
+            // TODO Reimplement frustrum culling
             if !chunk.is_visible(position * CHUNK_ISIZE, &view) {
                 continue;
             }
@@ -171,9 +171,10 @@ impl Renderable for World {
 }
 
 impl World {
-    pub fn new() -> Self {
+    pub fn new(render_context: &RenderContext) -> Self {
         let chunks = AHashMap::new();
-        let npc = Npc::load();
+        let mut npc = Npc::load();
+        npc.load_geometry(render_context);
 
         let chunk_database = sled::Config::new()
             .path("chunks")

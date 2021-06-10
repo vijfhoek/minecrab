@@ -1,19 +1,16 @@
-pub mod hud_state;
 pub mod world_state;
 
 use std::time::{Duration, Instant};
 
-use cgmath::EuclideanSpace;
 use winit::{
     dpi::PhysicalSize,
     event::{DeviceEvent, ElementState, MouseScrollDelta, VirtualKeyCode, WindowEvent},
     window::Window,
 };
 
-use hud_state::HudState;
 use world_state::WorldState;
 
-use crate::{render_context::RenderContext, texture::TextureManager};
+use crate::{hud::Hud, render_context::RenderContext, texture::TextureManager};
 
 pub const PRIMITIVE_STATE: wgpu::PrimitiveState = wgpu::PrimitiveState {
     topology: wgpu::PrimitiveTopology::TriangleList,
@@ -29,9 +26,10 @@ pub struct State {
     pub window_size: PhysicalSize<u32>,
     render_context: RenderContext,
     pub world_state: WorldState,
-    hud_state: HudState,
 
     pub mouse_grabbed: bool,
+
+    pub hud: Hud,
 }
 
 impl State {
@@ -110,16 +108,18 @@ impl State {
         render_context.texture_manager = Some(texture_manager);
 
         let world_state = WorldState::new(&render_context);
-        let hud_state = HudState::new(&render_context);
+
+        let hud = Hud::new(&render_context);
 
         Self {
             window_size,
             render_context,
 
             world_state,
-            hud_state,
 
             mouse_grabbed: false,
+
+            hud,
         }
     }
 
@@ -137,18 +137,24 @@ impl State {
         );
     }
 
+    fn set_hotbar_cursor(&mut self, i: usize) {
+        self.hud
+            .widgets_hud
+            .set_hotbar_cursor(&self.render_context, i);
+    }
+
     fn input_keyboard(&mut self, key_code: VirtualKeyCode, state: ElementState) {
         if state == ElementState::Pressed {
             match key_code {
-                VirtualKeyCode::Key1 => self.hud_state.set_hotbar_cursor(&self.render_context, 0),
-                VirtualKeyCode::Key2 => self.hud_state.set_hotbar_cursor(&self.render_context, 1),
-                VirtualKeyCode::Key3 => self.hud_state.set_hotbar_cursor(&self.render_context, 2),
-                VirtualKeyCode::Key4 => self.hud_state.set_hotbar_cursor(&self.render_context, 3),
-                VirtualKeyCode::Key5 => self.hud_state.set_hotbar_cursor(&self.render_context, 4),
-                VirtualKeyCode::Key6 => self.hud_state.set_hotbar_cursor(&self.render_context, 5),
-                VirtualKeyCode::Key7 => self.hud_state.set_hotbar_cursor(&self.render_context, 6),
-                VirtualKeyCode::Key8 => self.hud_state.set_hotbar_cursor(&self.render_context, 7),
-                VirtualKeyCode::Key9 => self.hud_state.set_hotbar_cursor(&self.render_context, 8),
+                VirtualKeyCode::Key1 => self.set_hotbar_cursor(0),
+                VirtualKeyCode::Key2 => self.set_hotbar_cursor(1),
+                VirtualKeyCode::Key3 => self.set_hotbar_cursor(2),
+                VirtualKeyCode::Key4 => self.set_hotbar_cursor(3),
+                VirtualKeyCode::Key5 => self.set_hotbar_cursor(4),
+                VirtualKeyCode::Key6 => self.set_hotbar_cursor(5),
+                VirtualKeyCode::Key7 => self.set_hotbar_cursor(6),
+                VirtualKeyCode::Key8 => self.set_hotbar_cursor(7),
+                VirtualKeyCode::Key9 => self.set_hotbar_cursor(8),
                 _ => self.world_state.input_keyboard(key_code, state),
             }
         } else {
@@ -175,14 +181,15 @@ impl State {
             } if self.mouse_grabbed => self.world_state.input_mouse_button(
                 button,
                 &self.render_context,
-                self.hud_state.selected_block_type(),
+                None, // TODO
             ),
 
             WindowEvent::MouseWheel {
                 delta: MouseScrollDelta::LineDelta(_, delta),
                 ..
             } => self
-                .hud_state
+                .hud
+                .widgets_hud
                 .move_hotbar_cursor(&self.render_context, -*delta as i32),
 
             _ => (),
@@ -198,37 +205,35 @@ impl State {
     pub fn update(&mut self, dt: Duration, render_time: Duration) {
         self.world_state
             .update(dt, render_time, &self.render_context);
-        self.hud_state.update(
-            &self.render_context,
-            &self.world_state.player.view.camera.position.to_vec(),
-        );
+
+        self.hud
+            .update(&self.render_context, &self.world_state.player.view.camera)
     }
 
     pub fn render(&mut self) -> anyhow::Result<(usize, Duration)> {
         let render_start = Instant::now();
 
-        Ok({
-            let frame = self.render_context.swap_chain.get_current_frame()?.output;
+        let frame = self.render_context.swap_chain.get_current_frame()?.output;
 
-            let mut render_encoder = self
-                .render_context
-                .device
-                .create_command_encoder(&Default::default());
+        let mut render_encoder = self
+            .render_context
+            .device
+            .create_command_encoder(&Default::default());
 
-            let mut triangle_count = 0;
-            triangle_count +=
-                self.world_state
-                    .render(&self.render_context, &frame, &mut render_encoder);
-            triangle_count +=
-                self.hud_state
-                    .render(&self.render_context, &frame, &mut render_encoder)?;
+        let mut triangle_count = 0;
+        triangle_count +=
+            self.world_state
+                .render(&self.render_context, &frame, &mut render_encoder);
 
-            self.render_context
-                .queue
-                .submit(std::iter::once(render_encoder.finish()));
-            let render_time = render_start.elapsed();
+        triangle_count += self
+            .hud
+            .render(&self.render_context, &mut render_encoder, &frame);
 
-            (triangle_count, render_time)
-        })
+        self.render_context
+            .queue
+            .submit(std::iter::once(render_encoder.finish()));
+        let render_time = render_start.elapsed();
+
+        Ok((triangle_count, render_time))
     }
 }

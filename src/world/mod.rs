@@ -410,33 +410,20 @@ impl World {
         block_type: BlockType,
     ) {
         if let Some((pos, face_normal)) = self.raycast(camera.position, camera.direction()) {
-            let new_pos = pos.cast().unwrap() + face_normal;
-
-            self.set_block(
-                new_pos.x as isize,
-                new_pos.y as isize,
-                new_pos.z as isize,
-                Some(Block { block_type }),
-            );
-
+            let new_pos = (pos.cast().unwrap() + face_normal).cast().unwrap();
+            self.set_block(new_pos.x, new_pos.y, new_pos.z, Some(Block { block_type }));
             self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
         }
     }
 
-    pub fn get_block(&self, x: isize, y: isize, z: isize) -> Option<&Block> {
-        let chunk = match self.chunks.get(&Point3::new(
-            x.div_euclid(CHUNK_ISIZE),
-            y.div_euclid(CHUNK_ISIZE),
-            z.div_euclid(CHUNK_ISIZE),
-        )) {
+    pub fn get_block(&self, point: Point3<isize>) -> Option<&Block> {
+        let chunk = match self.chunks.get(&point.map(|x| x.div_euclid(CHUNK_ISIZE))) {
             Some(chunk) => chunk,
             None => return None,
         };
 
-        let bx = x.rem_euclid(CHUNK_ISIZE) as usize;
-        let by = y.rem_euclid(CHUNK_ISIZE) as usize;
-        let bz = z.rem_euclid(CHUNK_ISIZE) as usize;
-        chunk.blocks[by][bz][bx].as_ref()
+        let b = point.map(|x| x.rem_euclid(CHUNK_ISIZE) as usize);
+        chunk.blocks[b.y][b.z][b.x].as_ref()
     }
 
     pub fn set_block(&mut self, x: isize, y: isize, z: isize, block: Option<Block>) {
@@ -518,14 +505,7 @@ impl World {
                 return None;
             }
 
-            if self
-                .get_block(
-                    position.x as isize,
-                    position.y as isize,
-                    position.z as isize,
-                )
-                .is_some()
-            {
+            if self.get_block(position.cast().unwrap()).is_some() {
                 // Intersection occurred
                 return Some((position.cast().unwrap(), face));
             }

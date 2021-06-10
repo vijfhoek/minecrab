@@ -129,12 +129,7 @@ impl Player {
         };
 
         for corner in &aabb.get_corners() {
-            let block = world.get_block(
-                corner.x.floor() as isize,
-                corner.y.floor() as isize,
-                corner.z.floor() as isize,
-            );
-
+            let block = world.get_block(corner.map(|x| x.floor() as isize));
             if block.is_some() {
                 return Some(aabb);
             }

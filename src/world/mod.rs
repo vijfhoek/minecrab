@@ -18,7 +18,7 @@ use crate::{
     view::View,
     world::{
         block::{Block, BlockType},
-        chunk::{Chunk, CHUNK_ISIZE},
+        chunk::{Chunk, CHUNK_ISIZE, CHUNK_SIZE},
         npc::Npc,
     },
 };
@@ -44,6 +44,8 @@ pub struct World {
     pub chunk_save_queue: VecDeque<(Point3<isize>, bool)>,
     pub chunk_load_queue: VecDeque<Point3<isize>>,
     pub chunk_generate_queue: VecDeque<Point3<isize>>,
+    pub chunk_occlusion_position: Option<Point3<isize>>,
+    pub chunks_visible: Option<Vec<Point3<isize>>>,
 
     pub highlighted: Option<(Point3<isize>, Vector3<i32>)>,
 
@@ -119,7 +121,7 @@ impl World {
 
         let start = Instant::now() - render_time;
         let mut chunk_updates = 0;
-        while chunk_updates == 0 || start.elapsed() < Duration::from_millis(16) {
+        while chunk_updates == 0 || start.elapsed() < Duration::from_millis(15) {
             if let Some(position) = self.chunk_load_queue.pop_front() {
                 let chunk = self.chunks.entry(position).or_default();
                 match chunk.load(position, &self.chunk_database) {
@@ -166,15 +168,22 @@ impl World {
 
             chunk_updates += 1;
         }
+
+        if chunk_updates > 0 {
+            self.chunk_occlusion_position = None;
+        }
     }
 
     pub fn render<'a>(
-        &'a self,
+        &'a mut self,
         render_context: &RenderContext,
         render_encoder: &mut CommandEncoder,
         frame: &SwapChainTexture,
         view: &View,
     ) -> usize {
+        // TODO Move this to update
+        self.update_occlusion(view);
+
         let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render_pass"),
             color_attachments: &[wgpu::RenderPassColorAttachment {
@@ -206,14 +215,13 @@ impl World {
         render_pass.set_bind_group(1, &view.bind_group, &[]);
         render_pass.set_bind_group(2, &self.time_bind_group, &[]);
 
+        let visible = self.chunks_visible.as_ref().unwrap();
         let mut triangle_count = 0;
-
-        for (position, chunk) in &self.chunks {
-            triangle_count += chunk.render(&mut render_pass, position, view);
+        for position in visible {
+            let chunk = self.chunks.get(position).unwrap();
+            triangle_count += chunk.render(&mut render_pass, &position, view);
         }
-
         triangle_count += self.npc.render(&mut render_pass);
-
         triangle_count
     }
 
@@ -345,11 +353,57 @@ impl World {
             chunk_load_queue: VecDeque::new(),
             chunk_save_queue: VecDeque::new(),
             chunk_generate_queue: VecDeque::new(),
+            chunk_occlusion_position: None,
+            chunks_visible: None,
 
             highlighted: None,
 
             unload_timer: Duration::new(0, 0),
         }
+    }
+
+    pub fn update_occlusion(&mut self, view: &View) {
+        let initial_position = view
+            .camera
+            .position
+            .map(|x| (x.floor() as isize).div_euclid(CHUNK_ISIZE));
+
+        if self.chunk_occlusion_position == Some(initial_position) {
+            return;
+        }
+
+        self.chunk_occlusion_position = Some(initial_position);
+        let mut queue = VecDeque::from(vec![initial_position]);
+
+        assert_eq!(CHUNK_SIZE, 32);
+        let mut visited = [0u32; CHUNK_SIZE * CHUNK_SIZE];
+        let mut render_queue = Vec::new();
+
+        while !queue.is_empty() {
+            let position = queue.pop_front().unwrap();
+
+            let b = position.map(|x| x.rem_euclid(CHUNK_ISIZE) as usize);
+            if (visited[b.x * CHUNK_SIZE + b.y] >> b.z) & 1 == 1 {
+                continue;
+            }
+            visited[b.x * CHUNK_SIZE + b.y] |= 1 << b.z;
+
+            if let Some(chunk) = self.chunks.get(&position) {
+                render_queue.push(position);
+                if !chunk.full {
+                    queue.extend(&[
+                        position + Vector3::unit_x(),
+                        position - Vector3::unit_x(),
+                        position + Vector3::unit_y(),
+                        position - Vector3::unit_y(),
+                        position + Vector3::unit_z(),
+                        position - Vector3::unit_z(),
+                    ]);
+                }
+            }
+        }
+
+        self.chunks_visible = Some(render_queue);
     }
 
     pub fn enqueue_chunk_save(&mut self, position: Point3<isize>, unload: bool) {

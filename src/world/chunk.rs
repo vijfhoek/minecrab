@@ -30,6 +30,7 @@ pub const CHUNK_ISIZE: isize = CHUNK_SIZE as isize;
 pub struct Chunk {
     pub blocks: [[[Option<Block>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
     pub buffers: Option<GeometryBuffers<u16>>,
+    pub full: bool,
 }
 
 impl Default for Chunk {
@@ -37,6 +38,7 @@ impl Default for Chunk {
         Self {
             blocks: [[[None; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
             buffers: None,
+            full: false,
         }
     }
 }
@@ -111,6 +113,21 @@ impl Chunk {
             println!("Trying to render non-loaded chunk {:?}", position);
             0
         }
+    }
+
+    pub fn update_fullness(&mut self) {
+        for y in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                for x in 0..CHUNK_SIZE {
+                    if self.blocks[y][z][x].is_none() {
+                        self.full = false;
+                        return;
+                    }
+                }
+            }
+        }
+
+        self.full = true;
     }
 
     pub fn generate(&mut self, chunk_x: isize, chunk_y: isize, chunk_z: isize) {
@@ -403,6 +420,8 @@ impl Chunk {
             &Self::quads_to_geometry(quads),
             BufferUsage::empty(),
         ));
+
+        self.update_fullness();
     }
 
     pub fn save(&self, position: Point3<isize>, store: &sled::Db) -> anyhow::Result<()> {

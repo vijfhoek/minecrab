@@ -3,7 +3,8 @@ use std::convert::TryInto;
 use wgpu::{BufferUsage, RenderPass};
 
 use crate::{
-    geometry::{Geometry, GeometryBuffers},
+    geometry::Geometry,
+    geometry_buffers::GeometryBuffers,
     hud::{UI_SCALE_X, UI_SCALE_Y},
     render_context::RenderContext,
     vertex::HudVertex,

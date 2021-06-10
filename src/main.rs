@@ -1,6 +1,7 @@
 mod aabb;
 mod camera;
 mod geometry;
+mod geometry_buffers;
 mod hud;
 mod player;
 mod render_context;

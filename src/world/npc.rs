@@ -5,8 +5,7 @@ use cgmath::Vector3;
 use wgpu::{BufferUsage, RenderPass};
 
 use crate::{
-    geometry::{Geometry, GeometryBuffers},
-    render_context::RenderContext,
+    geometry::Geometry, geometry_buffers::GeometryBuffers, render_context::RenderContext,
     vertex::BlockVertex,
 };
 

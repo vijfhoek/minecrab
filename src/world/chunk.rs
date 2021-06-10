@@ -2,7 +2,8 @@ use std::collections::VecDeque;
 
 use crate::{
     aabb::Aabb,
-    geometry::{Geometry, GeometryBuffers},
+    geometry::Geometry,
+    geometry_buffers::GeometryBuffers,
     render_context::RenderContext,
     vertex::BlockVertex,
     view::View,

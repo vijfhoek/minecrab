@@ -4,7 +4,7 @@ use cgmath::Point3;
 use wgpu::RenderPass;
 
 use crate::{
-    geometry::GeometryBuffers,
+    geometry_buffers::GeometryBuffers,
     render_context::RenderContext,
     text_renderer::{self, TextRenderer},
 };

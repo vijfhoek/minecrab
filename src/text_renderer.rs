@@ -1,10 +1,8 @@
 use std::convert::TryInto;
 
 use crate::{
-    geometry::{Geometry, GeometryBuffers},
-    render_context::RenderContext,
-    texture::Texture,
-    vertex::HudVertex,
+    geometry::Geometry, geometry_buffers::GeometryBuffers, render_context::RenderContext,
+    texture::Texture, vertex::HudVertex,
 };
 
 pub const DX: f32 = 20.0 / 640.0;

@@ -13,8 +13,8 @@ use crate::{
         quad::Quad,
     },
 };
-use ahash::{AHashMap, AHashSet};
 use cgmath::{Point3, Vector3};
+use fxhash::{FxHashMap, FxHashSet};
 use noise::utils::{NoiseMapBuilder, PlaneMapBuilder};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{
@@ -268,10 +268,10 @@ impl Chunk {
         &self,
         y: usize,
     ) -> (
-        AHashMap<(usize, usize), (BlockType, FaceFlags)>,
+        FxHashMap<(usize, usize), (BlockType, FaceFlags)>,
         VecDeque<(usize, usize)>,
     ) {
-        let mut culled = AHashMap::new();
+        let mut culled = FxHashMap::default();
         let mut queue = VecDeque::new();
 
         let y_blocks = &self.blocks[y];
@@ -297,12 +297,12 @@ impl Chunk {
         &self,
         y: usize,
         offset: Point3<isize>,
-        culled: AHashMap<(usize, usize), (BlockType, FaceFlags)>,
+        culled: FxHashMap<(usize, usize), (BlockType, FaceFlags)>,
         queue: &mut VecDeque<(usize, usize)>,
         highlighted: Option<(Vector3<usize>, Vector3<i32>)>,
     ) -> Vec<Quad> {
         let mut quads: Vec<Quad> = Vec::new();
-        let mut visited = AHashSet::new();
+        let mut visited = FxHashSet::default();
         let hl = highlighted.map(|h| h.0);
         while let Some((x, z)) = queue.pop_front() {
             let position = offset + Vector3::new(x, y, z).cast().unwrap();

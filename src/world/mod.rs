@@ -22,8 +22,8 @@ use crate::{
         npc::Npc,
     },
 };
-use ahash::AHashMap;
 use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3};
+use fxhash::FxHashMap;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BindGroup, Buffer, CommandEncoder, RenderPipeline, SwapChainTexture,
@@ -39,7 +39,7 @@ pub struct World {
 
     pub npc: Npc,
 
-    pub chunks: AHashMap<Point3<isize>, Chunk>,
+    pub chunks: FxHashMap<Point3<isize>, Chunk>,
     pub chunk_database: sled::Db,
     pub chunk_save_queue: VecDeque<(Point3<isize>, bool)>,
     pub chunk_load_queue: VecDeque<Point3<isize>>,
@@ -226,7 +226,7 @@ impl World {
     }
 
     pub fn new(render_context: &RenderContext, view: &View) -> Self {
-        let chunks = AHashMap::new();
+        let chunks = FxHashMap::default();
         let mut npc = Npc::new();
         npc.load_geometry(render_context);
 

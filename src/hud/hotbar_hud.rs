@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use wgpu::{BufferUsage, RenderPass};
 
 use crate::{

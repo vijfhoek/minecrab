@@ -1,9 +1,11 @@
 /target/
 /generated/
+/GPUCache/
 /flamegraph.svg
 /perf.data*
 /chunks/
 
-GPUCache/
 profile.txt
 callgrind.out.*
+build.rs
+shell.sh

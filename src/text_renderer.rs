@@ -107,10 +107,10 @@ impl TextRenderer {
 
         #[rustfmt::skip]
         let vertices = [
-            HudVertex { position: [x,      y     ], texture_coordinates: [tx,     ty    ], texture_index: 0 },
-            HudVertex { position: [x + DX, y     ], texture_coordinates: [tx + s, ty    ], texture_index: 0 },
-            HudVertex { position: [x + DX, y - DY], texture_coordinates: [tx + s, ty + s], texture_index: 0 },
-            HudVertex { position: [x,      y - DY], texture_coordinates: [tx,     ty + s], texture_index: 0 },
+            HudVertex { position: [x,      y     ], texture_coordinates: [tx,     ty    ], texture_index: 0, value: 1.0 },
+            HudVertex { position: [x + DX, y     ], texture_coordinates: [tx + s, ty    ], texture_index: 0, value: 1.0 },
+            HudVertex { position: [x + DX, y - DY], texture_coordinates: [tx + s, ty + s], texture_index: 0, value: 1.0 },
+            HudVertex { position: [x,      y - DY], texture_coordinates: [tx,     ty + s], texture_index: 0, value: 1.0 },
         ];
 
         #[rustfmt::skip]

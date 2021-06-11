@@ -30,21 +30,25 @@ impl Vertex for PlainVertex {
     }
 }
 
-/// Vertex used to represent HUD vertices.
+/// Represents a vertex in HUD geometry.
 ///
-/// A vertex with a 2D position and no normal, for representing UI elements.
+/// Used to bind vertex information to shaders with a 2D position, texture
+/// coordinates and index (for texture arrays) and a value (for dimming e.g.
+/// the sides on blocks in inventories)
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct HudVertex {
     pub position: [f32; 2],
     pub texture_coordinates: [f32; 2],
     pub texture_index: i32,
+    pub value: f32,
 }
 
 const HUD_VERTEX_ATTRIBUTES: &[VertexAttribute] = &wgpu::vertex_attr_array![
     0 => Float32x2,
     1 => Float32x2,
     2 => Sint32,
+    3 => Float32,
 ];
 
 impl Vertex for HudVertex {
@@ -57,7 +61,7 @@ impl Vertex for HudVertex {
     }
 }
 
-/// Vertex used to represent block vertices.
+/// Represents a vertex in world geometry.
 ///
 /// Aside from the usual vertex position, texture coordinates and normal, this "vertex" also
 /// contains whether the block is highlighted (i.e. the player is pointing at the block) and its

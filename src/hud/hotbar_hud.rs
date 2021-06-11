@@ -70,26 +70,108 @@ impl HotbarHud {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
 
-        let mut index = 0;
-        for cursor_index in 0..9 {
-            if let Some(block) = self.blocks[cursor_index as usize] {
-                let x = (-92 + 20 * cursor_index as i32) as f32;
-                let texture_index = block.texture_indices().2.try_into().unwrap();
+        let mut index_offset = 0;
+        for slot in 0..9 {
+            if let Some(block) = self.blocks[slot as usize] {
+                let x = (-92 + 20 * slot as i32) as f32;
+                let texture_indices = block.texture_indices();
 
-                #[rustfmt::skip]
                 vertices.extend(&[
-                    HudVertex { position: [UI_SCALE_X * (x +  5.0), -1.0 + UI_SCALE_Y * 18.0], texture_coordinates: [0.0,  0.0], texture_index },
-                    HudVertex { position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 18.0], texture_coordinates: [1.0,  0.0], texture_index },
-                    HudVertex { position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y *  4.0], texture_coordinates: [1.0,  1.0], texture_index },
-                    HudVertex { position: [UI_SCALE_X * (x +  5.0), -1.0 + UI_SCALE_Y *  4.0], texture_coordinates: [0.0,  1.0], texture_index },
+                    // Left face
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 3.5],
+                        texture_coordinates: [1.0, 1.0],
+                        texture_index: texture_indices.0 as i32,
+                        value: 0.5,
+                    },
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 5.0), -1.0 + UI_SCALE_Y * 6.5],
+                        texture_coordinates: [0.0, 1.0],
+                        texture_index: texture_indices.0 as i32,
+                        value: 0.5,
+                    },
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 5.0), -1.0 + UI_SCALE_Y * 15.5],
+                        texture_coordinates: [0.0, 0.0],
+                        texture_index: texture_indices.0 as i32,
+                        value: 0.5,
+                    },
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 12.5],
+                        texture_coordinates: [1.0, 0.0],
+                        texture_index: texture_indices.0 as i32,
+                        value: 0.5,
+                    },
+
+                    // Front face
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 15.5],
+                        texture_coordinates: [1.0, 0.0],
+                        texture_index: texture_indices.3 as i32,
+                        value: 0.15,
+                    },
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 12.5],
+                        texture_coordinates: [0.0, 0.0],
+                        texture_index: texture_indices.3 as i32,
+                        value: 0.15,
+                    },
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 3.5],
+                        texture_coordinates: [0.0, 1.0],
+                        texture_index: texture_indices.3 as i32,
+                        value: 0.15,
+                    },
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 6.5],
+                        texture_coordinates: [1.0, 1.0],
+                        texture_index: texture_indices.3 as i32,
+                        value: 0.15,
+                    },
+
+                    // Top face
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 15.5],
+                        texture_coordinates: [1.0, 0.0],
+                        texture_index: texture_indices.5 as i32,
+                        value: 1.0,
+                    },
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 18.5],
+                        texture_coordinates: [0.0, 0.0],
+                        texture_index: texture_indices.5 as i32,
+                        value: 1.0,
+                    },
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 5.0), -1.0 + UI_SCALE_Y * 15.5],
+                        texture_coordinates: [0.0, 1.0],
+                        texture_index: texture_indices.5 as i32,
+                        value: 1.0,
+                    },
+                    HudVertex {
+                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 12.5],
+                        texture_coordinates: [1.0, 1.0],
+                        texture_index: texture_indices.5 as i32,
+                        value: 1.0,
+                    },
                 ]);
 
                 #[rustfmt::skip]
                 indices.extend(&[
-                    index, 2 + index, 1 + index,
-                    index, 3 + index, 2 + index,
+                    // Left face
+                    2 + index_offset, index_offset, 1 + index_offset, 
+                    3 + index_offset, index_offset, 2 + index_offset, 
+
+                    // Right face
+                    6 + index_offset, 4 + index_offset, 5 + index_offset, 
+                    7 + index_offset, 4 + index_offset, 6 + index_offset, 
+
+                    // Top face
+                    10 + index_offset, 8 + index_offset, 9 + index_offset, 
+                    11 + index_offset, 8 + index_offset, 10 + index_offset, 
                 ]);
-                index += 4;
+
+                index_offset += 12;
             }
         }
 

@@ -5,14 +5,16 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum BlockType {
-    Cobblestone = 1,
-    Dirt = 2,
-    Stone = 3,
-    Grass = 4,
-    Bedrock = 5,
-    Sand = 6,
-    Gravel = 7,
-    Water = 8,
+    Cobblestone,
+    Dirt,
+    Stone,
+    Grass,
+    Bedrock,
+    Sand,
+    Gravel,
+    Water,
+    OakLog,
+    OakPlanks,
 }
 
 impl BlockType {
@@ -22,11 +24,13 @@ impl BlockType {
             BlockType::Cobblestone => ( 0,  0,  0,  0,  0,  0),
             BlockType::Dirt        => ( 1,  1,  1,  1,  1,  1),
             BlockType::Stone       => ( 2,  2,  2,  2,  2,  2),
-            BlockType::Grass       => ( 4,  4,  4,  4,  2,  3),
+            BlockType::Grass       => ( 4,  4,  4,  4,  1,  3),
             BlockType::Bedrock     => ( 5,  5,  5,  5,  5,  5),
             BlockType::Sand        => ( 6,  6,  6,  6,  6,  6),
             BlockType::Gravel      => ( 7,  7,  7,  7,  7,  7),
-            BlockType::Water       => ( 8,  8,  8,  8,  8,  8), // up to 71
+            BlockType::Water       => ( 8,  8,  8,  8,  8,  8), // up to 39
+            BlockType::OakLog      => (40, 40, 40, 40, 41, 41),
+            BlockType::OakPlanks   => (42, 42, 42, 42, 42, 42),
         }
     }
 

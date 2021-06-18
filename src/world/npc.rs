@@ -47,6 +47,7 @@ impl Npc {
                         normal,
                         highlighted: 0,
                         texture_id: 0,
+                        color: [1.0, 1.0, 1.0, 1.0],
                     };
 
                     vertices.push(current_vert);

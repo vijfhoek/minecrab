@@ -1,3 +1,4 @@
+use cgmath::{ElementWise, Vector4};
 use wgpu::{BufferUsage, RenderPass};
 
 use crate::{
@@ -27,7 +28,7 @@ impl HotbarHud {
             Some(BlockType::Cobblestone),
             Some(BlockType::OakPlanks),
             Some(BlockType::OakLog),
-            None,
+            Some(BlockType::OakLeaves),
         ];
 
         Self {
@@ -73,6 +74,11 @@ impl HotbarHud {
             if let Some(block) = self.blocks[slot as usize] {
                 let x = (-92 + 20 * slot as i32) as f32;
                 let texture_indices = block.texture_indices();
+                let color = block.color();
+
+                let color_left = color.mul_element_wise(Vector4::new(0.5, 0.5, 0.5, 1.0)).into();
+                let color_front = color.mul_element_wise(Vector4::new(0.15, 0.15, 0.15, 1.0)).into();
+                let color_top = color.into();
 
                 vertices.extend(&[
                     // Left face
@@ -80,25 +86,25 @@ impl HotbarHud {
                         position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 3.5],
                         texture_coordinates: [1.0, 1.0],
                         texture_index: texture_indices.0 as i32,
-                        value: 0.5,
+                        color: color_left,
                     },
                     HudVertex {
                         position: [UI_SCALE_X * (x + 5.0), -1.0 + UI_SCALE_Y * 6.5],
                         texture_coordinates: [0.0, 1.0],
                         texture_index: texture_indices.0 as i32,
-                        value: 0.5,
+                        color: color_left,
                     },
                     HudVertex {
                         position: [UI_SCALE_X * (x + 5.0), -1.0 + UI_SCALE_Y * 15.5],
                         texture_coordinates: [0.0, 0.0],
                         texture_index: texture_indices.0 as i32,
-                        value: 0.5,
+                        color: color_left,
                     },
                     HudVertex {
                         position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 12.5],
                         texture_coordinates: [1.0, 0.0],
                         texture_index: texture_indices.0 as i32,
-                        value: 0.5,
+                        color: color_left,
                     },
 
                     // Front face
@@ -106,25 +112,25 @@ impl HotbarHud {
                         position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 15.5],
                         texture_coordinates: [1.0, 0.0],
                         texture_index: texture_indices.3 as i32,
-                        value: 0.15,
+                        color: color_front,
                     },
                     HudVertex {
                         position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 12.5],
                         texture_coordinates: [0.0, 0.0],
                         texture_index: texture_indices.3 as i32,
-                        value: 0.15,
+                        color: color_front,
                     },
                     HudVertex {
                         position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 3.5],
                         texture_coordinates: [0.0, 1.0],
                         texture_index: texture_indices.3 as i32,
-                        value: 0.15,
+                        color: color_front,
                     },
                     HudVertex {
                         position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 6.5],
                         texture_coordinates: [1.0, 1.0],
                         texture_index: texture_indices.3 as i32,
-                        value: 0.15,
+                        color: color_front,
                     },
 
                     // Top face
@@ -132,25 +138,25 @@ impl HotbarHud {
                         position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 15.5],
                         texture_coordinates: [1.0, 0.0],
                         texture_index: texture_indices.5 as i32,
-                        value: 1.0,
+                        color: color_top,
                     },
                     HudVertex {
                         position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 18.5],
                         texture_coordinates: [0.0, 0.0],
                         texture_index: texture_indices.5 as i32,
-                        value: 1.0,
+                        color: color_top,
                     },
                     HudVertex {
                         position: [UI_SCALE_X * (x + 5.0), -1.0 + UI_SCALE_Y * 15.5],
                         texture_coordinates: [0.0, 1.0],
                         texture_index: texture_indices.5 as i32,
-                        value: 1.0,
+                        color: color_top,
                     },
                     HudVertex {
                         position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 12.5],
                         texture_coordinates: [1.0, 1.0],
                         texture_index: texture_indices.5 as i32,
-                        value: 1.0,
+                        color: color_top,
                     },
                 ]);
 

@@ -21,6 +21,7 @@ struct VertexInput {
     [[location(2)]] normal: vec3<f32>;
     [[location(3)]] highlighted: i32;
     [[location(4)]] texture_id: i32;
+    [[location(5)]] color: vec4<f32>;
 };
 
 struct VertexOutput {
@@ -30,6 +31,7 @@ struct VertexOutput {
     [[location(2)]] world_position: vec3<f32>;
     [[location(3)]] highlighted: i32;
     [[location(4)]] texture_id: i32;
+    [[location(5)]] color: vec4<f32>;
 };
 
 let pi: f32 = 3.14159265359;
@@ -53,6 +55,7 @@ fn main(model: VertexInput) -> VertexOutput {
 
     out.clip_position = view.projection * vec4<f32>(out.world_position, 1.0);
     out.highlighted = model.highlighted;
+    out.color = model.color;
     return out;
 }
 
@@ -66,7 +69,7 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
         texture_sampler,
         in.texture_coordinates,
         in.texture_id
-    );
+    ) * in.color;
 
     let light_position = vec3<f32>(-100.0, 500.0, -200.0);
     let light_color = vec3<f32>(1.0, 1.0, 1.0);

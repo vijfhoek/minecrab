@@ -1,3 +1,4 @@
+use cgmath::Vector4;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
@@ -15,6 +16,7 @@ pub enum BlockType {
     Water,
     OakLog,
     OakPlanks,
+    OakLeaves,
 }
 
 impl BlockType {
@@ -31,6 +33,15 @@ impl BlockType {
             BlockType::Water       => ( 8,  8,  8,  8,  8,  8), // up to 39
             BlockType::OakLog      => (40, 40, 40, 40, 41, 41),
             BlockType::OakPlanks   => (42, 42, 42, 42, 42, 42),
+            BlockType::OakLeaves   => (43, 43, 43, 43, 43, 43),
+        }
+    }
+
+    pub const fn color(self) -> Vector4<f32> {
+        match self {
+            Self::Water => Vector4::new(0.1540, 0.2885, 0.5575, 1.0),
+            Self::OakLeaves => Vector4::new(0.4784, 0.7294, 0.1255, 1.0),
+            _ => Vector4::new(1.0, 1.0, 1.0, 1.0),
         }
     }
 

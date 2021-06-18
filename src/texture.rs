@@ -114,7 +114,7 @@ impl Texture {
     }
 }
 
-pub const TEXTURE_COUNT: usize = 43;
+pub const TEXTURE_COUNT: usize = 44;
 
 pub struct TextureManager {
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -189,6 +189,7 @@ impl TextureManager {
         self.load(render_context, "assets/block/oak_log.png")?; // 40
         self.load(render_context, "assets/block/oak_log_top.png")?; // 41
         self.load(render_context, "assets/block/oak_planks.png")?; // 42
+        self.load(render_context, "assets/block/oak_leaves.png")?; // 43
         assert_eq!(TEXTURE_COUNT, self.textures.len());
 
         let texture_array = render_context

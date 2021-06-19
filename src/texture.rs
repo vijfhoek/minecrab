@@ -1,6 +1,7 @@
-use std::num::NonZeroU32;
+use std::{num::NonZeroU32, ops::Range};
 
-use image::EncodableLayout;
+use cgmath::{Vector2, Zero};
+use image::{EncodableLayout, ImageBuffer, Rgba};
 use wgpu::Origin3d;
 
 use crate::render_context::RenderContext;
@@ -56,18 +57,16 @@ impl Texture {
         }
     }
 
-    pub fn from_bytes(
+    fn from_rgba8(
         render_context: &RenderContext,
-        bytes: &[u8],
+        rgba: &ImageBuffer<Rgba<u8>, Vec<u8>>,
+        origin: Vector2<u32>,
+        size: Vector2<u32>,
         label: &str,
     ) -> anyhow::Result<Self> {
-        let image = image::load_from_memory(bytes)?;
-        let rgba = image.into_rgba8();
-        let (width, height) = rgba.dimensions();
-
         let texture_size = wgpu::Extent3d {
-            width,
-            height,
+            width: size.x,
+            height: size.y,
             depth_or_array_layers: 1,
         };
 
@@ -85,17 +84,19 @@ impl Texture {
                     | wgpu::TextureUsage::COPY_SRC,
             });
 
+        let stride = 4 * rgba.width();
+        let offset = (origin.y * stride + origin.x * 4) as usize;
         render_context.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
-            rgba.as_bytes(),
+            &rgba.as_bytes()[offset..offset + (size.y * stride) as usize],
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: NonZeroU32::new(4 * width),
-                rows_per_image: NonZeroU32::new(height),
+                bytes_per_row: NonZeroU32::new(stride),
+                rows_per_image: NonZeroU32::new(size.y),
             },
             texture_size,
         );
@@ -111,6 +112,52 @@ impl Texture {
             sampler: None,
             view,
         })
+    }
+
+    pub fn from_bytes(
+        render_context: &RenderContext,
+        bytes: &[u8],
+        label: &str,
+    ) -> anyhow::Result<Self> {
+        let image = image::load_from_memory(bytes)?;
+        let rgba = image.into_rgba8();
+        let (width, height) = rgba.dimensions();
+        Self::from_rgba8(
+            render_context,
+            &rgba,
+            Vector2::zero(),
+            Vector2::new(width, height),
+            label,
+        )
+    }
+
+    pub fn from_bytes_atlas(
+        render_context: &RenderContext,
+        bytes: &[u8],
+        tile_size: Vector2<u32>,
+        label: &str,
+    ) -> anyhow::Result<Vec<Self>> {
+        let image = image::load_from_memory(bytes)?;
+        let rgba = image.into_rgba8();
+
+        let (width, height) = rgba.dimensions();
+        assert_eq!(width % tile_size.x, 0);
+        assert_eq!(height % tile_size.y, 0);
+
+        let mut tiles = Vec::new();
+        for y in (0..height).step_by(tile_size.y as usize) {
+            for x in (0..width).step_by(tile_size.x as usize) {
+                tiles.push(Self::from_rgba8(
+                    render_context,
+                    &rgba,
+                    Vector2::new(x, y),
+                    tile_size,
+                    &format!("{}({},{})", label, x, y),
+                )?);
+            }
+        }
+
+        Ok(tiles)
     }
 }
 
@@ -174,6 +221,8 @@ impl TextureManager {
     }
 
     pub fn load_all(&mut self, render_context: &RenderContext) -> anyhow::Result<()> {
+        let tile_size = Vector2::new(16, 16);
+
         self.load(render_context, "assets/block/cobblestone.png")?; // 0
         self.load(render_context, "assets/block/dirt.png")?; // 1
         self.load(render_context, "assets/block/stone.png")?; // 2
@@ -182,10 +231,7 @@ impl TextureManager {
         self.load(render_context, "assets/block/bedrock.png")?; // 5
         self.load(render_context, "assets/block/sand.png")?; // 6
         self.load(render_context, "assets/block/gravel.png")?; // 7
-        for i in 0..32 {
-            let path = format!("assets/water_still_plains/frame-{}.png", i);
-            self.load(render_context, &path)?; // 8 - 39
-        }
+        self.load_atlas(render_context, "assets/block/water_still.png", tile_size)?; // 8 - 39
         self.load(render_context, "assets/block/oak_log.png")?; // 40
         self.load(render_context, "assets/block/oak_log_top.png")?; // 41
         self.load(render_context, "assets/block/oak_planks.png")?; // 42
@@ -279,5 +325,22 @@ impl TextureManager {
 
         println!("loaded {} to {}", path, id);
         Ok(id)
+    }
+
+    pub fn load_atlas(
+        &mut self,
+        render_context: &RenderContext,
+        path: &str,
+        tile_size: Vector2<u32>,
+    ) -> anyhow::Result<Range<usize>> {
+        let bytes = std::fs::read(path)?;
+        let mut textures = Texture::from_bytes_atlas(render_context, &bytes, tile_size, path)?;
+
+        let start = self.textures.len();
+        self.textures.append(&mut textures);
+        let end = self.textures.len();
+
+        println!("loaded atlas {} to {}..{}", path, start, end);
+        Ok(start..end)
     }
 }

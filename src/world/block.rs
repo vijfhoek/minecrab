@@ -37,11 +37,12 @@ impl BlockType {
         }
     }
 
+    #[rustfmt::skip]
     pub const fn color(self) -> Vector4<f32> {
         match self {
-            Self::Water => Vector4::new(0.1540, 0.2885, 0.5575, 1.0),
-            Self::OakLeaves => Vector4::new(0.4784, 0.7294, 0.1255, 1.0),
-            _ => Vector4::new(1.0, 1.0, 1.0, 1.0),
+            Self::Water     => Vector4::new(0.247, 0.463, 0.894, 1.0),
+            Self::OakLeaves => Vector4::new(0.478, 0.729, 0.126, 1.0),
+            _               => Vector4::new(1.0, 1.0, 1.0, 1.0),
         }
     }
 

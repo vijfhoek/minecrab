@@ -108,7 +108,7 @@ impl View {
         let projection = OPENGL_TO_WGPU_MATRIX.invert().unwrap() * self.projection_matrix;
         let inverse_matrix = projection.invert().unwrap();
 
-        let corners = &[
+        let corners = [
             Vector4::new(-1.0, -1.0, 1.0, 1.0),
             Vector4::new(-1.0, -1.0, -1.0, 1.0),
             Vector4::new(-1.0, 1.0, 1.0, 1.0),
@@ -121,7 +121,7 @@ impl View {
 
         let mut min = Vector4::new(f32::INFINITY, f32::INFINITY, f32::INFINITY, 1.0);
         let mut max = Vector4::new(0.0, 0.0, 0.0, 1.0);
-        for &corner in corners {
+        for corner in corners {
             let corner = inverse_matrix * corner;
             let corner = corner / corner.w;
 

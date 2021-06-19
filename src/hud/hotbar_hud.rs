@@ -80,7 +80,7 @@ impl HotbarHud {
                 let color_front = color.mul_element_wise(Vector4::new(0.15, 0.15, 0.15, 1.0)).into();
                 let color_top = color.into();
 
-                vertices.extend(&[
+                vertices.extend([
                     // Left face
                     HudVertex {
                         position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 3.5],
@@ -161,7 +161,7 @@ impl HotbarHud {
                 ]);
 
                 #[rustfmt::skip]
-                indices.extend(&[
+                indices.extend([
                     // Left face
                     2 + index_offset, index_offset, 1 + index_offset, 
                     3 + index_offset, index_offset, 2 + index_offset, 

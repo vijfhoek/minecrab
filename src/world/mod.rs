@@ -100,7 +100,7 @@ impl World {
         // Unload chunks that are far away
         self.unload_timer += dt;
         if self.unload_timer.as_secs() >= 10 {
-            self.unload_timer = Duration::new(0, 0);
+            self.unload_timer = Duration::ZERO;
 
             let camera_pos = camera.position.to_vec();
             let unload_distance = (RENDER_DISTANCE * CHUNK_ISIZE) as f32 * 1.5;
@@ -358,7 +358,7 @@ impl World {
 
             highlighted: None,
 
-            unload_timer: Duration::new(0, 0),
+            unload_timer: Duration::ZERO,
         }
     }
 
@@ -391,7 +391,7 @@ impl World {
             if let Some(chunk) = self.chunks.get(&position) {
                 render_queue.push(position);
                 if !chunk.full {
-                    queue.extend(&[
+                    queue.extend([
                         position + Vector3::unit_x(),
                         position - Vector3::unit_x(),
                         position + Vector3::unit_y(),

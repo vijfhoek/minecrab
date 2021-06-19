@@ -4,6 +4,6 @@ name: frontend
 
 steps:
   - name: build
-    image: rust:slim
+    image: rust:1.53.0-slim
     commands:
       - cargo build

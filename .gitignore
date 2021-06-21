@@ -4,6 +4,7 @@
 /flamegraph.svg
 /perf.data*
 /chunks/
+/assets
 
 profile.txt
 callgrind.out.*

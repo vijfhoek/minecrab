@@ -1,5 +1,7 @@
 use std::convert::TryInto;
 
+use anyhow::Context;
+
 use crate::{
     geometry::Geometry, geometry_buffers::GeometryBuffers, render_context::RenderContext,
     texture::Texture, vertex::HudVertex,
@@ -27,8 +29,10 @@ pub struct TextRenderer {
 
 impl TextRenderer {
     pub fn new(render_context: &RenderContext) -> anyhow::Result<Self> {
-        let bytes = std::fs::read("assets/font/ascii_shadow.png")?;
-        let texture = Texture::from_bytes(render_context, &bytes, "font")?;
+        let bytes = std::fs::read("assets/font/ascii_shadow.png")
+            .context("Failed to load assets/font/ascii_shadow.png")?;
+        let texture = Texture::from_bytes(render_context, &bytes, "font")
+            .context("Failed to decode assets/font/ascii_shadow.png")?;
 
         let sampler = render_context
             .device

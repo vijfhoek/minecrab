@@ -4,7 +4,16 @@
 /flamegraph.svg
 /perf.data*
 /chunks/
-/assets
+
+/assets/*
+!/assets/grass_block_*.png
+!/assets/font
+
+/assets/font/*
+!/assets/font/ascii_shadow.png
+
+/release/
+
 
 profile.txt
 callgrind.out.*

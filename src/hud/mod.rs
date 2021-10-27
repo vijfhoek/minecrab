@@ -1,4 +1,4 @@
-use wgpu::{CommandEncoder, RenderPipeline, SwapChainTexture};
+use wgpu::{CommandEncoder, RenderPipeline};
 
 use crate::{
     render_context::RenderContext,
@@ -7,6 +7,8 @@ use crate::{
 };
 
 use self::{debug_hud::DebugHud, hotbar_hud::HotbarHud, widgets_hud::WidgetsHud};
+
+use std::borrow::Cow;
 
 pub mod debug_hud;
 pub mod hotbar_hud;
@@ -44,7 +46,7 @@ impl Hud {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 comparison: false,
                                 filtering: true,
@@ -53,7 +55,7 @@ impl Hud {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 view_dimension: wgpu::TextureViewDimension::D2Array,
@@ -68,8 +70,7 @@ impl Hud {
             .device
             .create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some("UI shader"),
-                flags: wgpu::ShaderFlags::all(),
-                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/ui.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("../shaders/ui.wgsl"))),
             });
 
         let pipeline_layout =
@@ -94,23 +95,11 @@ impl Hud {
                 fragment: Some(wgpu::FragmentState {
                     module,
                     entry_point: "main",
-                    targets: &[wgpu::ColorTargetState {
-                        format: render_context.swap_chain_descriptor.format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrite::ALL,
-                    }],
+                    targets: &[render_context.format.into()],
                 }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    clamp_depth: false,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    conservative: false,
-                },
+                primitive: wgpu::PrimitiveState::default(),
                 depth_stencil: None,
-                multisample: Default::default(),
+                multisample: wgpu::MultisampleState::default(),
             })
     }
 
@@ -127,18 +116,19 @@ impl Hud {
         &'a self,
         render_context: &RenderContext,
         encoder: &mut CommandEncoder,
-        frame: &SwapChainTexture,
+        texture_view: &wgpu::TextureView,
     ) -> usize {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("HUD render pass"),
             color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: &frame.view,
+                view: texture_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
                     store: true,
                 },
             }],
-            ..Default::default()
+            depth_stencil_attachment: None,
         });
         render_pass.set_pipeline(&self.pipeline);
 

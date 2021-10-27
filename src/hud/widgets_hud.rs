@@ -1,5 +1,5 @@
 // TODO Might want to move the hotbar outside
-use wgpu::{BindGroup, BufferUsage, RenderPass};
+use wgpu::{BindGroup, BufferUsages, RenderPass};
 
 use crate::{
     geometry::Geometry,
@@ -25,7 +25,7 @@ impl WidgetsHud {
             indices: INDICES.to_vec(),
         };
         let geometry_buffers =
-            GeometryBuffers::from_geometry(render_context, &geometry, BufferUsage::COPY_DST);
+            GeometryBuffers::from_geometry(render_context, &geometry, BufferUsages::COPY_DST);
 
         Self {
             texture_bind_group,
@@ -58,7 +58,7 @@ impl WidgetsHud {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 comparison: false,
                                 filtering: true,
@@ -67,7 +67,7 @@ impl WidgetsHud {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 view_dimension: wgpu::TextureViewDimension::D2Array,

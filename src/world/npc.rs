@@ -2,7 +2,7 @@ extern crate gltf;
 extern crate wgpu;
 
 use cgmath::Vector3;
-use wgpu::{BufferUsage, RenderPass};
+use wgpu::{BufferUsages, RenderPass};
 
 use crate::{
     geometry::Geometry, geometry_buffers::GeometryBuffers, render_context::RenderContext,
@@ -68,7 +68,7 @@ impl Npc {
         self.geometry_buffers = Some(GeometryBuffers::from_geometry(
             render_context,
             &self.geometry,
-            BufferUsage::empty(),
+            BufferUsages::empty(),
         ));
     }
 

@@ -1,5 +1,6 @@
 use std::{num::NonZeroU32, ops::Range};
 
+use anyhow::Context;
 use cgmath::{Vector2, Zero};
 use image::{EncodableLayout, ImageBuffer, Rgba};
 use wgpu::Origin3d;
@@ -317,8 +318,9 @@ impl TextureManager {
     }
 
     pub fn load(&mut self, render_context: &RenderContext, path: &str) -> anyhow::Result<usize> {
-        let bytes = std::fs::read(path)?;
-        let texture = Texture::from_bytes(render_context, &bytes, path)?;
+        let bytes = std::fs::read(path).context(format!("Failed to load {}", path))?;
+        let texture = Texture::from_bytes(render_context, &bytes, path)
+            .context(format!("Failed to decode {}", path))?;
 
         let id = self.textures.len();
         self.textures.push(texture);
@@ -333,8 +335,9 @@ impl TextureManager {
         path: &str,
         tile_size: Vector2<u32>,
     ) -> anyhow::Result<Range<usize>> {
-        let bytes = std::fs::read(path)?;
-        let mut textures = Texture::from_bytes_atlas(render_context, &bytes, tile_size, path)?;
+        let bytes = std::fs::read(path).context(format!("Failed to load {}", path))?;
+        let mut textures = Texture::from_bytes_atlas(render_context, &bytes, tile_size, path)
+            .context(format!("Failed to decode {}", path))?;
 
         let start = self.textures.len();
         self.textures.append(&mut textures);

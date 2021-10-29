@@ -95,7 +95,11 @@ impl Hud {
                 fragment: Some(wgpu::FragmentState {
                     module,
                     entry_point: "main",
-                    targets: &[render_context.format.into()],
+                    targets: &[wgpu::ColorTargetState {
+                        format: render_context.format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }],
                 }),
                 primitive: wgpu::PrimitiveState::default(),
                 depth_stencil: None,

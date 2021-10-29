@@ -78,12 +78,9 @@ impl State {
 
         let size = window.inner_size();
 
-        println!("preferred format: {:?}", render_surface.get_preferred_format(&adapter));
-
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            // format: render_surface.get_preferred_format(&adapter).unwrap(),
-            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            format: render_surface.get_preferred_format(&adapter).unwrap(),
             width: size.width,
             height: size.height,
 

@@ -311,7 +311,14 @@ impl World {
                     fragment: Some(wgpu::FragmentState {
                         module: &shader,
                         entry_point: "main",
-                        targets: &[render_context.format.into()],
+                        targets: &[wgpu::ColorTargetState {
+                            format: render_context.format,
+                            blend: Some(wgpu::BlendState {
+                                alpha: wgpu::BlendComponent::REPLACE,
+                                color: wgpu::BlendComponent::REPLACE,
+                            }),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        }],
                     }),
                     primitive: wgpu::PrimitiveState {
                         cull_mode: Some(wgpu::Face::Back),

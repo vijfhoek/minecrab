@@ -323,7 +323,7 @@ impl World {
                     primitive: wgpu::PrimitiveState {
                         cull_mode: Some(wgpu::Face::Back),
                         polygon_mode: wgpu::PolygonMode::Fill,
-                        ..Default::default()
+                        ..wgpu::PrimitiveState::default()
                     },
                     depth_stencil: Some(wgpu::DepthStencilState {
                         format: Texture::DEPTH_FORMAT,

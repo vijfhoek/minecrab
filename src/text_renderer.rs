@@ -33,6 +33,7 @@ impl TextRenderer {
         let sampler = render_context
             .device
             .create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("text sampler"),
                 mag_filter: wgpu::FilterMode::Nearest,
                 min_filter: wgpu::FilterMode::Nearest,
                 ..wgpu::SamplerDescriptor::default()

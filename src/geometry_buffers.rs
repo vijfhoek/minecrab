@@ -25,7 +25,7 @@ impl<I: bytemuck::Pod> GeometryBuffers<I> {
         let vertices = render_context
             .device
             .create_buffer_init(&BufferInitDescriptor {
-                label: None,
+                label: Some("geometry vertex buffer"),
                 contents: bytemuck::cast_slice(&geometry.vertices),
                 usage: wgpu::BufferUsages::VERTEX | usage,
             });
@@ -33,7 +33,7 @@ impl<I: bytemuck::Pod> GeometryBuffers<I> {
         let indices = render_context
             .device
             .create_buffer_init(&BufferInitDescriptor {
-                label: None,
+                label: Some("geometry index buffer"),
                 contents: bytemuck::cast_slice(&geometry.indices),
                 usage: wgpu::BufferUsages::INDEX | usage,
             });

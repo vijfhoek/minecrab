@@ -103,6 +103,7 @@ impl TextRenderer {
         &self,
         x: f32,
         y: f32,
+        ratio: f32,
         c: u8,
         index_offset: u16,
     ) -> ([HudVertex; 4], [u16; 6]) {
@@ -111,10 +112,10 @@ impl TextRenderer {
 
         #[rustfmt::skip]
         let vertices = [
-            HudVertex { position: [x,      y     ], texture_coordinates: [tx,     ty    ], texture_index: 0, color: [1.0; 4]},
-            HudVertex { position: [x + DX, y     ], texture_coordinates: [tx + s, ty    ], texture_index: 0, color: [1.0; 4]},
-            HudVertex { position: [x + DX, y - DY], texture_coordinates: [tx + s, ty + s], texture_index: 0, color: [1.0; 4]},
-            HudVertex { position: [x,      y - DY], texture_coordinates: [tx,     ty + s], texture_index: 0, color: [1.0; 4]},
+            HudVertex { position: [x,              y     ], texture_coordinates: [tx,     ty    ], texture_index: 0, color: [1.0; 4]},
+            HudVertex { position: [x + DY / ratio, y     ], texture_coordinates: [tx + s, ty    ], texture_index: 0, color: [1.0; 4]},
+            HudVertex { position: [x + DY / ratio, y - DY], texture_coordinates: [tx + s, ty + s], texture_index: 0, color: [1.0; 4]},
+            HudVertex { position: [x,              y - DY], texture_coordinates: [tx,     ty + s], texture_index: 0, color: [1.0; 4]},
         ];
 
         #[rustfmt::skip]
@@ -130,6 +131,7 @@ impl TextRenderer {
         &self,
         mut x: f32,
         mut y: f32,
+        ratio: f32,
         string: &str,
     ) -> Geometry<HudVertex, u16> {
         let mut vertices = Vec::new();
@@ -140,11 +142,11 @@ impl TextRenderer {
 
         for &c in ascii.as_bytes() {
             let index_offset = vertices.len().try_into().unwrap();
-            let (v, i) = self.char_geometry(x, y, c, index_offset);
+            let (v, i) = self.char_geometry(x, y, ratio, c, index_offset);
             vertices.extend(&v);
             indices.extend(&i);
 
-            x += DX * (CHARACTER_WIDTHS[c as usize] as f32 / 8.0);
+            x += (DY / ratio) * (CHARACTER_WIDTHS[c as usize] as f32 / 8.0);
             if x >= 1.0 {
                 x = 0.0;
                 y -= DY;
@@ -159,9 +161,10 @@ impl TextRenderer {
         render_context: &RenderContext,
         x: f32,
         y: f32,
+        ratio: f32,
         string: &str,
     ) -> GeometryBuffers<u16> {
-        let geometry = self.string_geometry(x, y, string);
+        let geometry = self.string_geometry(x, y, ratio, string);
         GeometryBuffers::from_geometry(render_context, &geometry, wgpu::BufferUsage::empty())
     }
 }

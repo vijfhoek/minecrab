@@ -119,6 +119,7 @@ impl State {
         self.window_size = size;
         self.render_context.swap_chain_descriptor.width = size.width;
         self.render_context.swap_chain_descriptor.height = size.height;
+        self.hud.resize(&self.render_context, size);
 
         self.player.view.projection.resize(size.width, size.height);
         self.world.depth_texture =

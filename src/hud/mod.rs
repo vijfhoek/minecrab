@@ -7,6 +7,7 @@ use crate::{
 };
 
 use self::{debug_hud::DebugHud, hotbar_hud::HotbarHud, widgets_hud::WidgetsHud};
+use winit::dpi::PhysicalSize;
 
 pub mod debug_hud;
 pub mod hotbar_hud;
@@ -151,4 +152,23 @@ impl Hud {
         // TODO The hotbar widget should be rendered by HotbarHud
         self.hotbar_hud.blocks[self.widgets_hud.hotbar_cursor_position]
     }
+
+    pub fn resize(&mut self, render_context: &RenderContext, size: PhysicalSize<u32>) {
+        let ratio = size.width as f32 / size.height as f32;
+
+        const MAX_SCALE_X_BEFORE_HOTBAR_CLIPS: f32 = 0.0108;
+
+        let mut ui_scale_y = 0.008;
+        let mut ui_scale_x = ui_scale_y / ratio;
+
+        if ui_scale_x > MAX_SCALE_X_BEFORE_HOTBAR_CLIPS {
+            ui_scale_x = MAX_SCALE_X_BEFORE_HOTBAR_CLIPS;
+            ui_scale_y = ui_scale_x * ratio;
+        }
+
+        self.debug_hud.set_ratio(ratio);
+        self.hotbar_hud.set_scale(ui_scale_x, ui_scale_y);
+        self.widgets_hud.set_scale(render_context, ui_scale_x, ui_scale_y);
+    }
+
 }

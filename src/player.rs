@@ -4,6 +4,8 @@ use cgmath::{InnerSpace, Point3, Rad, Vector3};
 
 use crate::{aabb::Aabb, render_context::RenderContext, utils, view::View, world::World};
 
+pub const PLAYER_REACH: f32 = 4.0;
+
 pub struct Player {
     pub sprinting: bool,
     pub grounded: bool,

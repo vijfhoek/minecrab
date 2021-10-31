@@ -28,6 +28,7 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BindGroup, Buffer, CommandEncoder, RenderPipeline, SwapChainTexture,
 };
+use cgmath::num_traits::Inv;
 
 pub struct World {
     pub render_pipeline: RenderPipeline,
@@ -429,7 +430,7 @@ impl World {
 
     fn update_highlight(&mut self, render_context: &RenderContext, camera: &Camera) {
         let old = self.highlighted;
-        let new = self.raycast(camera.position, camera.direction());
+        let new = self.raycast(camera.position, camera.direction(), crate::player::PLAYER_REACH, false);
 
         let old_chunk = old.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
         let new_chunk = new.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
@@ -451,7 +452,7 @@ impl World {
     }
 
     pub fn break_at_crosshair(&mut self, render_context: &RenderContext, camera: &Camera) {
-        if let Some((pos, _)) = self.raycast(camera.position, camera.direction()) {
+        if let Some((pos, _)) = self.raycast(camera.position, camera.direction(), crate::player::PLAYER_REACH, true) {
             self.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
             self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
         }
@@ -463,7 +464,7 @@ impl World {
         camera: &Camera,
         block_type: BlockType,
     ) {
-        if let Some((pos, face_normal)) = self.raycast(camera.position, camera.direction()) {
+        if let Some((pos, face_normal)) = self.raycast(camera.position, camera.direction(), crate::player::PLAYER_REACH, true) {
             let new_pos = (pos.cast().unwrap() + face_normal).cast().unwrap();
             self.set_block(new_pos.x, new_pos.y, new_pos.z, Some(Block { block_type }));
             self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
@@ -510,54 +511,73 @@ impl World {
         &self,
         origin: Point3<f32>,
         direction: Vector3<f32>,
+        max_distance: f32,
+        debug: bool,
     ) -> Option<(Point3<isize>, Vector3<i32>)> {
         let direction = direction.normalize();
-        let scale = Vector3::new(
-            Self::calc_scale(direction, direction.x),
-            Self::calc_scale(direction, direction.y),
-            Self::calc_scale(direction, direction.z),
-        );
-
-        let mut position: Point3<i32> = origin.map(|x| x.floor() as i32);
+        let mut position: Point3<i32> = origin.map(|x| (x + 0.001).floor() as i32);
         let step = direction.map(|x| x.signum() as i32);
 
-        // Truncate the origin
-        let mut lengths = Vector3 {
-            x: if direction.x < 0.0 {
-                (origin.x - position.x as f32) * scale.x
+        fn get_t_max(n: f32, n_step: i32) -> f32 {
+            if n_step < 0 {
+                (n - 1.0).ceil() - n
             } else {
-                (position.x as f32 + 1.0 - origin.x) * scale.x
-            },
-            y: if direction.y < 0.0 {
-                (origin.y - position.y as f32) * scale.y
-            } else {
-                (position.y as f32 + 1.0 - origin.y) * scale.y
-            },
-            z: if direction.z < 0.0 {
-                (origin.z - position.z as f32) * scale.z
-            } else {
-                (position.z as f32 + 1.0 - origin.z) * scale.z
-            },
-        };
+                (n + 1.0).floor() - n
+            }
+        }
+
+        let mut t_max_x = get_t_max(origin.x, step.x) / direction.x;
+        let mut t_max_y = get_t_max(origin.y, step.y) / direction.y;
+        let mut t_max_z = get_t_max(origin.z, step.z) / direction.z;
+
+        let t_delta_x = direction.x.abs().inv();
+        let t_delta_y = direction.y.abs().inv();
+        let t_delta_z = direction.z.abs().inv();
+
+        if debug {
+            println!("Origin {:?}", origin);
+            println!("Direction {:?}", direction);
+            println!("Position {:?}", position);
+            println!("Step {:?}", step);
+            println!("tMax ({}, {}, {})", t_max_x, t_max_y, t_max_z);
+            println!("tDelta ({}, {}, {})", t_delta_x, t_delta_y, t_delta_z);
+        }
 
         let mut face;
+        let mut t = 0.0;
 
-        while lengths.magnitude2() < 100.0_f32.powi(2) {
-            if lengths.x < lengths.y && lengths.x < lengths.z {
-                lengths.x += scale.x;
-                position.x += step.x;
-                face = Vector3::unit_x() * -step.x;
-            } else if lengths.y < lengths.x && lengths.y < lengths.z {
-                lengths.y += scale.y;
-                position.y += step.y;
-                face = Vector3::unit_y() * -step.y;
-            } else if lengths.z < lengths.x && lengths.z < lengths.y {
-                lengths.z += scale.z;
-                position.z += step.z;
-                face = Vector3::unit_z() * -step.z;
+        let mut i = 0;
+        while i < 40 {
+            if t_max_x < t_max_y {
+                if t_max_x < t_max_z {
+                    t_max_x += t_delta_x;
+                    position.x += step.x;
+                    face = Vector3::unit_x() * -step.x;
+
+                    t = t_max_x;
+                } else {
+                    t_max_z += t_delta_z;
+                    position.z += step.z;
+                    face = Vector3::unit_z() * -step.z;
+
+                    t = t_max_z;
+                }
             } else {
-                return None;
+                if t_max_y < t_max_z {
+                    t_max_y += t_delta_y;
+                    position.y += step.y;
+                    face = Vector3::unit_y() * -step.y;
+
+                    t = t_max_y;
+                } else {
+                    t_max_z += t_delta_z;
+                    position.z += step.z;
+                    face = Vector3::unit_z() * -step.z;
+
+                    t = t_max_z;
+                }
             }
+            i += 1;
 
             if self.get_block(position.cast().unwrap()).is_some() {
                 // Intersection occurred

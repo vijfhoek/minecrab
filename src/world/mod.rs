@@ -430,7 +430,7 @@ impl World {
 
     fn update_highlight(&mut self, render_context: &RenderContext, camera: &Camera) {
         let old = self.highlighted;
-        let new = self.raycast(camera.position, camera.direction(), crate::player::PLAYER_REACH, false);
+        let new = self.raycast(camera.position, camera.direction());
 
         let old_chunk = old.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
         let new_chunk = new.map(|(pos, _)| pos.map(|n| n.div_euclid(CHUNK_ISIZE)));
@@ -452,7 +452,7 @@ impl World {
     }
 
     pub fn break_at_crosshair(&mut self, render_context: &RenderContext, camera: &Camera) {
-        if let Some((pos, _)) = self.raycast(camera.position, camera.direction(), crate::player::PLAYER_REACH, true) {
+        if let Some((pos, _)) = self.raycast(camera.position, camera.direction()) {
             self.set_block(pos.x as isize, pos.y as isize, pos.z as isize, None);
             self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
         }
@@ -464,7 +464,7 @@ impl World {
         camera: &Camera,
         block_type: BlockType,
     ) {
-        if let Some((pos, face_normal)) = self.raycast(camera.position, camera.direction(), crate::player::PLAYER_REACH, true) {
+        if let Some((pos, face_normal)) = self.raycast(camera.position, camera.direction()) {
             let new_pos = (pos.cast().unwrap() + face_normal).cast().unwrap();
             self.set_block(new_pos.x, new_pos.y, new_pos.z, Some(Block { block_type }));
             self.update_chunk_geometry(render_context, pos / CHUNK_ISIZE);
@@ -498,27 +498,23 @@ impl World {
         self.enqueue_chunk_save(chunk_position, false);
     }
 
-    fn calc_scale(vector: Vector3<f32>, scalar: f32) -> f32 {
-        if scalar == 0.0 {
-            f32::INFINITY
-        } else {
-            (vector / scalar).magnitude()
-        }
-    }
-
     #[allow(dead_code)]
     pub fn raycast(
         &self,
         origin: Point3<f32>,
         direction: Vector3<f32>,
-        max_distance: f32,
-        debug: bool,
     ) -> Option<(Point3<isize>, Vector3<i32>)> {
         let direction = direction.normalize();
-        let mut position: Point3<i32> = origin.map(|x| (x + 0.001).floor() as i32);
+        let mut position: Point3<i32> = origin.map(|x| x.floor() as i32);
         let step = direction.map(|x| x.signum() as i32);
 
-        fn get_t_max(n: f32, n_step: i32) -> f32 {
+        // Algorithm from: http://www.cse.yorku.ca/%7Eamana/research/grid.pdf
+        fn get_t_max(mut n: f32, n_step: i32) -> f32 {
+            // Make sure we're not on a boundary. Might be a better way to do this?
+            if n.fract() < 0.0001 {
+                n += 0.0001;
+            }
+
             if n_step < 0 {
                 (n - 1.0).ceil() - n
             } else {
@@ -534,50 +530,30 @@ impl World {
         let t_delta_y = direction.y.abs().inv();
         let t_delta_z = direction.z.abs().inv();
 
-        if debug {
-            println!("Origin {:?}", origin);
-            println!("Direction {:?}", direction);
-            println!("Position {:?}", position);
-            println!("Step {:?}", step);
-            println!("tMax ({}, {}, {})", t_max_x, t_max_y, t_max_z);
-            println!("tDelta ({}, {}, {})", t_delta_x, t_delta_y, t_delta_z);
-        }
-
         let mut face;
-        let mut t = 0.0;
 
-        let mut i = 0;
-        while i < 40 {
+        while t_max_x.min(t_max_y).min(t_max_z) < 100.0 {
             if t_max_x < t_max_y {
                 if t_max_x < t_max_z {
                     t_max_x += t_delta_x;
                     position.x += step.x;
                     face = Vector3::unit_x() * -step.x;
-
-                    t = t_max_x;
                 } else {
                     t_max_z += t_delta_z;
                     position.z += step.z;
                     face = Vector3::unit_z() * -step.z;
-
-                    t = t_max_z;
                 }
             } else {
                 if t_max_y < t_max_z {
                     t_max_y += t_delta_y;
                     position.y += step.y;
                     face = Vector3::unit_y() * -step.y;
-
-                    t = t_max_y;
                 } else {
                     t_max_z += t_delta_z;
                     position.z += step.z;
                     face = Vector3::unit_z() * -step.z;
-
-                    t = t_max_z;
                 }
             }
-            i += 1;
 
             if self.get_block(position.cast().unwrap()).is_some() {
                 // Intersection occurred

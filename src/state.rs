@@ -83,9 +83,7 @@ impl State {
             format: render_surface.get_preferred_format(&adapter).unwrap(),
             width: size.width,
             height: size.height,
-
-            // was Immediate, but can't be guaranteed to work
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: wgpu::PresentMode::Immediate,
         };
 
         render_surface.configure(&render_device, &config);

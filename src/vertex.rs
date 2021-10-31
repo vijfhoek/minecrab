@@ -31,7 +31,7 @@ impl Vertex for HudVertex {
     fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
+            step_mode: wgpu::VertexStepMode::Vertex,
             attributes: HUD_VERTEX_ATTRIBUTES,
         }
     }
@@ -66,7 +66,7 @@ impl Vertex for BlockVertex {
     fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
+            step_mode: wgpu::VertexStepMode::Vertex,
             attributes: BLOCK_VERTEX_ATTRIBUTES,
         }
     }

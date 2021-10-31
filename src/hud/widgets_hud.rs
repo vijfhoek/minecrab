@@ -1,5 +1,5 @@
 // TODO Might want to move the hotbar outside
-use wgpu::{BindGroup, BufferUsage, RenderPass};
+use wgpu::{BindGroup, BufferUsages, RenderPass};
 
 use crate::{
     geometry::Geometry,
@@ -34,16 +34,13 @@ impl WidgetsHud {
     }
 
     fn create_textures(render_context: &RenderContext) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
-        let texture = Texture::from_bytes(
-            render_context,
-            include_bytes!("../../assets/gui/widgets.png"),
-            "Texture GUI widgets",
-        )
-        .unwrap();
+        let bytes = std::fs::read("assets/gui/widgets.png").unwrap();
+        let texture = Texture::from_bytes(render_context, &bytes, "Texture GUI widgets").unwrap();
 
         let sampler = render_context
             .device
             .create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("widgets sampler"),
                 mag_filter: wgpu::FilterMode::Nearest,
                 min_filter: wgpu::FilterMode::Linear,
                 ..wgpu::SamplerDescriptor::default()
@@ -57,7 +54,7 @@ impl WidgetsHud {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 comparison: false,
                                 filtering: true,
@@ -66,7 +63,7 @@ impl WidgetsHud {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 view_dimension: wgpu::TextureViewDimension::D2Array,
@@ -171,7 +168,7 @@ impl WidgetsHud {
             indices: INDICES.to_vec(),
         };
 
-        GeometryBuffers::from_geometry(render_context, &geometry, BufferUsage::COPY_DST)
+        GeometryBuffers::from_geometry(render_context, &geometry, BufferUsages::COPY_DST)
     }
 }
 

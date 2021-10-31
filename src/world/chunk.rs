@@ -22,10 +22,13 @@ use serde::{
     ser::SerializeSeq,
     Deserialize, Serialize, Serializer,
 };
-use wgpu::{BufferUsage, RenderPass};
+use wgpu::{BufferUsages, RenderPass};
 
 pub const CHUNK_SIZE: usize = 32;
 pub const CHUNK_ISIZE: isize = CHUNK_SIZE as isize;
+
+type CoordinateXZ = (usize, usize);
+type BlockFace = (BlockType, FaceFlags);
 
 pub struct Chunk {
     pub blocks: [[[Option<Block>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
@@ -102,7 +105,7 @@ impl Chunk {
         position: &Point3<isize>,
         view: &View,
     ) -> usize {
-        if !self.is_visible(position * CHUNK_ISIZE, &view) {
+        if !self.is_visible(position * CHUNK_ISIZE, view) {
             // Frustrum culling
             0
         } else if let Some(buffers) = &self.buffers {
@@ -264,13 +267,7 @@ impl Chunk {
         visible_faces
     }
 
-    fn cull_layer(
-        &self,
-        y: usize,
-    ) -> (
-        FxHashMap<(usize, usize), (BlockType, FaceFlags)>,
-        VecDeque<(usize, usize)>,
-    ) {
+    fn cull_layer(&self, y: usize) -> (FxHashMap<CoordinateXZ, BlockFace>, VecDeque<CoordinateXZ>) {
         let mut culled = FxHashMap::default();
         let mut queue = VecDeque::new();
 
@@ -297,8 +294,8 @@ impl Chunk {
         &self,
         y: usize,
         offset: Point3<isize>,
-        culled: FxHashMap<(usize, usize), (BlockType, FaceFlags)>,
-        queue: &mut VecDeque<(usize, usize)>,
+        culled: FxHashMap<CoordinateXZ, BlockFace>,
+        queue: &mut VecDeque<CoordinateXZ>,
         highlighted: Option<(Vector3<usize>, Vector3<i32>)>,
     ) -> Vec<Quad> {
         let mut quads: Vec<Quad> = Vec::new();
@@ -418,7 +415,7 @@ impl Chunk {
         self.buffers = Some(GeometryBuffers::from_geometry(
             render_context,
             &Self::quads_to_geometry(quads),
-            BufferUsage::empty(),
+            BufferUsages::empty(),
         ));
 
         self.update_fullness();

@@ -15,7 +15,6 @@ mod view;
 mod world;
 
 use std::time::{Duration, Instant};
-use wgpu::SwapChainError;
 use winit::{
     dpi::{PhysicalSize, Size},
     event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
@@ -163,16 +162,24 @@ fn main() {
 
                 let render_time = match state.render() {
                     Err(root_cause) => {
-                        match root_cause.downcast_ref::<SwapChainError>() {
-                            // Recreate the swap_chain if lost
-                            Some(wgpu::SwapChainError::Lost) => state.resize(state.window_size),
-                            // The system is out of memory, we should probably quit
-                            Some(wgpu::SwapChainError::OutOfMemory) => {
-                                *control_flow = ControlFlow::Exit
+                        match root_cause.downcast_ref::<wgpu::SurfaceError>() {
+                            // Recreate if lost
+                            Some(wgpu::SurfaceError::Lost) => {
+                                state.resize(state.window_size);
                             }
-                            // All other errors (Outdated, Timeout) should be resolved by the next frame
-                            Some(_) | None => eprintln!("{:?}", root_cause),
-                        };
+                            // The system is out of memory, we should probably quit
+                            Some(wgpu::SurfaceError::OutOfMemory) => {
+                                *control_flow = ControlFlow::Exit;
+                            }
+                            // All other errors should be resolved by the next frame
+                            Some(wgpu::SurfaceError::Timeout) => {
+                                eprintln!("TIMEOUT");
+                            }
+                            Some(wgpu::SurfaceError::Outdated) => {
+                                eprintln!("OUTDATED");
+                            }
+                            None => {}
+                        }
                         return;
                     }
 

@@ -20,6 +20,7 @@ pub struct State {
     pub window_size: PhysicalSize<u32>,
     pub mouse_grabbed: bool,
     render_context: RenderContext,
+    surface_config: wgpu::SurfaceConfiguration,
 
     pub world: World,
     player: Player,
@@ -29,23 +30,45 @@ pub struct State {
 impl State {
     async fn create_render_device(
         window: &Window,
-    ) -> (wgpu::Surface, wgpu::Adapter, wgpu::Device, wgpu::Queue) {
-        let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+    ) -> (
+        wgpu::SurfaceConfiguration,
+        wgpu::Surface,
+        wgpu::Adapter,
+        wgpu::Device,
+        wgpu::Queue,
+    ) {
+        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let render_surface = unsafe { instance.create_surface(window) };
+
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&render_surface),
+                force_fallback_adapter: false,
             })
             .await
-            .unwrap();
-        println!("Using {:?}", adapter.get_info().backend);
+            .or_else(|| {
+                let adapters = instance.enumerate_adapters(wgpu::Backends::all());
+                eprintln!(
+                    "No matching graphics adapter available, using any: {:?}",
+                    adapters.collect::<Vec<_>>()
+                );
+                let mut adapters = instance.enumerate_adapters(wgpu::Backends::all());
+                adapters.next()
+            })
+            .expect("No graphics adapter");
+
+        println!(
+            "Using backend {:?} with features {:?}",
+            adapter.get_info().backend,
+            adapter.features()
+        );
 
         let (render_device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("render_device"),
-                    features: wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY,
+                    features: wgpu::Features::TEXTURE_BINDING_ARRAY,
                     limits: wgpu::Limits::default(),
                 },
                 None,
@@ -53,45 +76,33 @@ impl State {
             .await
             .unwrap();
 
-        (render_surface, adapter, render_device, queue)
-    }
-
-    fn create_swap_chain(
-        window: &Window,
-        adapter: &wgpu::Adapter,
-        render_device: &wgpu::Device,
-        render_surface: &wgpu::Surface,
-    ) -> (wgpu::SwapChainDescriptor, wgpu::SwapChain) {
         let size = window.inner_size();
 
-        let swap_chain_descriptor = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-            format: adapter
-                .get_swap_chain_preferred_format(render_surface)
-                .unwrap(),
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: render_surface.get_preferred_format(&adapter).unwrap(),
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Immediate,
         };
-        let swap_chain = render_device.create_swap_chain(&render_surface, &swap_chain_descriptor);
 
-        (swap_chain_descriptor, swap_chain)
+        render_surface.configure(&render_device, &config);
+
+        (config, render_surface, adapter, render_device, queue)
     }
 
     pub async fn new(window: &Window) -> State {
-        let (render_surface, render_adapter, render_device, render_queue) =
+        let (surface_config, render_surface, render_adapter, render_device, render_queue) =
             Self::create_render_device(window).await;
 
-        let (swap_chain_descriptor, swap_chain) =
-            Self::create_swap_chain(window, &render_adapter, &render_device, &render_surface);
-
         let mut render_context = RenderContext {
+            format: render_surface
+                .get_preferred_format(&render_adapter)
+                .unwrap(),
             surface: render_surface,
             device: render_device,
             queue: render_queue,
-
-            swap_chain_descriptor,
-            swap_chain,
+            size: window.inner_size(),
             texture_manager: None,
         };
 
@@ -107,6 +118,7 @@ impl State {
             window_size: window.inner_size(),
             mouse_grabbed: false,
             render_context,
+            surface_config,
 
             world,
             player,
@@ -117,18 +129,11 @@ impl State {
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         println!("resizing to {:?}", size);
         self.window_size = size;
-        self.render_context.swap_chain_descriptor.width = size.width;
-        self.render_context.swap_chain_descriptor.height = size.height;
-        self.hud.resize(&self.render_context, size);
 
+        self.hud.resize(&self.render_context, size);
         self.player.view.projection.resize(size.width, size.height);
         self.world.depth_texture =
             Texture::create_depth_texture(&self.render_context, "depth_texture");
-
-        self.render_context.swap_chain = self.render_context.device.create_swap_chain(
-            &self.render_context.surface,
-            &self.render_context.swap_chain_descriptor,
-        );
     }
 
     fn set_hotbar_cursor(&mut self, i: usize) {
@@ -242,31 +247,40 @@ impl State {
     pub fn render(&mut self) -> anyhow::Result<(usize, Duration)> {
         let render_start = Instant::now();
 
-        let frame = self.render_context.swap_chain.get_current_frame()?.output;
+        let frame = self.render_context.surface.get_current_texture().unwrap();
+        let texture_view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut render_encoder = self
-            .render_context
-            .device
-            .create_command_encoder(&Default::default());
+        let mut render_encoder =
+            self.render_context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("encoder"),
+                });
 
         let mut triangle_count = 0;
 
         triangle_count += self.world.render(
             &self.render_context,
             &mut render_encoder,
-            &frame,
+            &texture_view,
             &self.player.view,
         );
 
         triangle_count += self
             .hud
-            .render(&self.render_context, &mut render_encoder, &frame);
+            .render(&self.render_context, &mut render_encoder, &texture_view);
 
         self.render_context
             .queue
-            .submit(std::iter::once(render_encoder.finish()));
-        let render_time = render_start.elapsed();
+            .submit(Some(render_encoder.finish()));
 
+        // XXX: This deadlocks on Intel Xe with Mesa 21.2.4 (2021/10)
+        // See https://github.com/gfx-rs/wgpu/issues/2070
+        frame.present();
+
+        let render_time = render_start.elapsed();
         Ok((triangle_count, render_time))
     }
 }

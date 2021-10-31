@@ -4,7 +4,7 @@ pub struct RenderContext {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub swap_chain_descriptor: wgpu::SwapChainDescriptor,
-    pub swap_chain: wgpu::SwapChain,
+    pub size: winit::dpi::PhysicalSize<u32>,
+    pub format: wgpu::TextureFormat,
     pub texture_manager: Option<TextureManager>,
 }

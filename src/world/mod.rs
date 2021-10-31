@@ -5,6 +5,7 @@ pub mod npc;
 pub mod quad;
 
 use std::{
+    borrow::Cow,
     collections::VecDeque,
     time::{Duration, Instant},
 };
@@ -26,8 +27,9 @@ use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3};
 use fxhash::FxHashMap;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    BindGroup, Buffer, CommandEncoder, RenderPipeline, SwapChainTexture,
+    BindGroup, Buffer, CommandEncoder, RenderPipeline,
 };
+use cgmath::num_traits::Inv;
 
 pub struct World {
     pub render_pipeline: RenderPipeline,
@@ -67,11 +69,9 @@ impl World {
         camera: &Camera,
     ) {
         self.time.time += dt.as_secs_f32();
-        render_context.queue.write_buffer(
-            &self.time_buffer,
-            0,
-            &bytemuck::cast_slice(&[self.time]),
-        );
+        render_context
+            .queue
+            .write_buffer(&self.time_buffer, 0, bytemuck::cast_slice(&[self.time]));
 
         self.update_highlight(render_context, camera);
 
@@ -178,7 +178,7 @@ impl World {
         &'a mut self,
         render_context: &RenderContext,
         render_encoder: &mut CommandEncoder,
-        frame: &SwapChainTexture,
+        texture_view: &wgpu::TextureView,
         view: &View,
     ) -> usize {
         // TODO Move this to update
@@ -187,7 +187,7 @@ impl World {
         let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render_pass"),
             color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: &frame.view,
+                view: texture_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -219,7 +219,7 @@ impl World {
         let mut triangle_count = 0;
         for position in visible {
             let chunk = self.chunks.get(position).unwrap();
-            triangle_count += chunk.render(&mut render_pass, &position, view);
+            triangle_count += chunk.render(&mut render_pass, position, view);
         }
         triangle_count += self.npc.render(&mut render_pass);
         triangle_count
@@ -244,7 +244,7 @@ impl World {
             .create_buffer_init(&BufferInitDescriptor {
                 label: Some("time_buffer"),
                 contents: bytemuck::cast_slice(&[time]),
-                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
         let time_bind_group_layout =
@@ -253,7 +253,7 @@ impl World {
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -292,8 +292,9 @@ impl World {
         let shader = render_context.device.create_shader_module(
             &(wgpu::ShaderModuleDescriptor {
                 label: Some("shader"),
-                flags: wgpu::ShaderFlags::all(),
-                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/world.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
+                    "../shaders/world.wgsl"
+                ))),
             }),
         );
 
@@ -312,18 +313,18 @@ impl World {
                         module: &shader,
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
-                            format: render_context.swap_chain_descriptor.format,
+                            format: render_context.format,
                             blend: Some(wgpu::BlendState {
                                 alpha: wgpu::BlendComponent::REPLACE,
                                 color: wgpu::BlendComponent::REPLACE,
                             }),
-                            write_mask: wgpu::ColorWrite::ALL,
+                            write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
                     primitive: wgpu::PrimitiveState {
                         cull_mode: Some(wgpu::Face::Back),
                         polygon_mode: wgpu::PolygonMode::Fill,
-                        ..Default::default()
+                        ..wgpu::PrimitiveState::default()
                     },
                     depth_stencil: Some(wgpu::DepthStencilState {
                         format: Texture::DEPTH_FORMAT,
@@ -497,14 +498,6 @@ impl World {
         self.enqueue_chunk_save(chunk_position, false);
     }
 
-    fn calc_scale(vector: Vector3<f32>, scalar: f32) -> f32 {
-        if scalar == 0.0 {
-            f32::INFINITY
-        } else {
-            (vector / scalar).magnitude()
-        }
-    }
-
     #[allow(dead_code)]
     pub fn raycast(
         &self,
@@ -512,51 +505,51 @@ impl World {
         direction: Vector3<f32>,
     ) -> Option<(Point3<isize>, Vector3<i32>)> {
         let direction = direction.normalize();
-        let scale = Vector3::new(
-            Self::calc_scale(direction, direction.x),
-            Self::calc_scale(direction, direction.y),
-            Self::calc_scale(direction, direction.z),
-        );
-
         let mut position: Point3<i32> = origin.map(|x| x.floor() as i32);
         let step = direction.map(|x| x.signum() as i32);
 
-        // Truncate the origin
-        let mut lengths = Vector3 {
-            x: if direction.x < 0.0 {
-                (origin.x - position.x as f32) * scale.x
+        // Algorithm from: http://www.cse.yorku.ca/%7Eamana/research/grid.pdf
+        fn dif_from_next(n: f32, n_step: i32) -> f32 {
+            if n_step < 0 {
+                // Difference between the next smallest integer and n
+                n.floor() - n
             } else {
-                (position.x as f32 + 1.0 - origin.x) * scale.x
-            },
-            y: if direction.y < 0.0 {
-                (origin.y - position.y as f32) * scale.y
-            } else {
-                (position.y as f32 + 1.0 - origin.y) * scale.y
-            },
-            z: if direction.z < 0.0 {
-                (origin.z - position.z as f32) * scale.z
-            } else {
-                (position.z as f32 + 1.0 - origin.z) * scale.z
-            },
-        };
+                // Difference between the next biggest integer and n
+                (n + 1.0).floor() - n
+            }
+        }
+
+        let mut t_max_x = dif_from_next(origin.x, step.x) / direction.x;
+        let mut t_max_y = dif_from_next(origin.y, step.y) / direction.y;
+        let mut t_max_z = dif_from_next(origin.z, step.z) / direction.z;
+
+        let t_delta_x = direction.x.abs().inv();
+        let t_delta_y = direction.y.abs().inv();
+        let t_delta_z = direction.z.abs().inv();
 
         let mut face;
 
-        while lengths.magnitude2() < 100.0_f32.powi(2) {
-            if lengths.x < lengths.y && lengths.x < lengths.z {
-                lengths.x += scale.x;
-                position.x += step.x;
-                face = Vector3::unit_x() * -step.x;
-            } else if lengths.y < lengths.x && lengths.y < lengths.z {
-                lengths.y += scale.y;
-                position.y += step.y;
-                face = Vector3::unit_y() * -step.y;
-            } else if lengths.z < lengths.x && lengths.z < lengths.y {
-                lengths.z += scale.z;
-                position.z += step.z;
-                face = Vector3::unit_z() * -step.z;
+        while t_max_x.min(t_max_y).min(t_max_z) < 100.0 {
+            if t_max_x < t_max_y {
+                if t_max_x < t_max_z {
+                    t_max_x += t_delta_x;
+                    position.x += step.x;
+                    face = Vector3::unit_x() * -step.x;
+                } else {
+                    t_max_z += t_delta_z;
+                    position.z += step.z;
+                    face = Vector3::unit_z() * -step.z;
+                }
             } else {
-                return None;
+                if t_max_y < t_max_z {
+                    t_max_y += t_delta_y;
+                    position.y += step.y;
+                    face = Vector3::unit_y() * -step.y;
+                } else {
+                    t_max_z += t_delta_z;
+                    position.z += step.z;
+                    face = Vector3::unit_z() * -step.z;
+                }
             }
 
             if self.get_block(position.cast().unwrap()).is_some() {

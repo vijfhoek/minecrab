@@ -35,12 +35,8 @@ impl WidgetsHud {
     }
 
     fn create_textures(render_context: &RenderContext) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
-        let texture = Texture::from_bytes(
-            render_context,
-            include_bytes!("../../assets/gui/widgets.png"),
-            "Texture GUI widgets",
-        )
-        .unwrap();
+        let bytes = std::fs::read("assets/gui/widgets.png").unwrap();
+        let texture = Texture::from_bytes(render_context, &bytes, "Texture GUI widgets").unwrap();
 
         let sampler = render_context
             .device

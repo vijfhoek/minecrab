@@ -1,7 +1,7 @@
 use std::mem::size_of;
 
 use cgmath::{EuclideanSpace, Matrix4, Point3, SquareMatrix, Vector4, Zero};
-use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsage};
+use wgpu::{BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages};
 
 use crate::{
     aabb::Aabb,
@@ -38,8 +38,8 @@ impl View {
         );
 
         let projection = Projection::new(
-            render_context.swap_chain_descriptor.width,
-            render_context.swap_chain_descriptor.height,
+            render_context.size.width,
+            render_context.size.height,
             cgmath::Deg(45.0),
             0.1,
             300.0,
@@ -48,7 +48,7 @@ impl View {
         let buffer = render_context.device.create_buffer(&BufferDescriptor {
             label: Some("view buffer"),
             size: size_of::<ViewRaw>() as u64,
-            usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST,
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -58,7 +58,7 @@ impl View {
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,

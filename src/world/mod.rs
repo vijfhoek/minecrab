@@ -512,7 +512,7 @@ impl World {
         fn dif_from_next(n: f32, n_step: i32) -> f32 {
             if n_step < 0 {
                 // Difference between the next smallest integer and n
-                (n).floor() - n
+                n.floor() - n
             } else {
                 // Difference between the next biggest integer and n
                 (n + 1.0).floor() - n

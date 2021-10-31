@@ -1,5 +1,5 @@
 use cgmath::{ElementWise, Vector4};
-use wgpu::{BufferUsage, RenderPass};
+use wgpu::{BufferUsages, RenderPass};
 
 use crate::{
     geometry::Geometry,
@@ -38,7 +38,7 @@ impl HotbarHud {
             geometry_buffers: GeometryBuffers::from_geometry(
                 render_context,
                 &Geometry::<HudVertex, _>::default(),
-                BufferUsage::empty(),
+                BufferUsages::empty(),
             ),
         }
     }
@@ -48,7 +48,7 @@ impl HotbarHud {
             self.geometry_buffers = GeometryBuffers::from_geometry(
                 render_context,
                 &self.block_vertices(),
-                wgpu::BufferUsage::empty(),
+                wgpu::BufferUsages::empty(),
             );
         }
     }
@@ -76,8 +76,12 @@ impl HotbarHud {
                 let texture_indices = block.texture_indices();
                 let color = block.color();
 
-                let color_left = color.mul_element_wise(Vector4::new(0.5, 0.5, 0.5, 1.0)).into();
-                let color_front = color.mul_element_wise(Vector4::new(0.15, 0.15, 0.15, 1.0)).into();
+                let color_left = color
+                    .mul_element_wise(Vector4::new(0.5, 0.5, 0.5, 1.0))
+                    .into();
+                let color_front = color
+                    .mul_element_wise(Vector4::new(0.15, 0.15, 0.15, 1.0))
+                    .into();
                 let color_top = color.into();
 
                 vertices.extend([
@@ -106,7 +110,6 @@ impl HotbarHud {
                         texture_index: texture_indices.0 as i32,
                         color: color_left,
                     },
-
                     // Front face
                     HudVertex {
                         position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 15.5],
@@ -132,7 +135,6 @@ impl HotbarHud {
                         texture_index: texture_indices.3 as i32,
                         color: color_front,
                     },
-
                     // Top face
                     HudVertex {
                         position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 15.5],
@@ -163,16 +165,16 @@ impl HotbarHud {
                 #[rustfmt::skip]
                 indices.extend([
                     // Left face
-                    2 + index_offset, index_offset, 1 + index_offset, 
-                    3 + index_offset, index_offset, 2 + index_offset, 
+                    2 + index_offset, index_offset, 1 + index_offset,
+                    3 + index_offset, index_offset, 2 + index_offset,
 
                     // Right face
-                    6 + index_offset, 4 + index_offset, 5 + index_offset, 
-                    7 + index_offset, 4 + index_offset, 6 + index_offset, 
+                    6 + index_offset, 4 + index_offset, 5 + index_offset,
+                    7 + index_offset, 4 + index_offset, 6 + index_offset,
 
                     // Top face
-                    10 + index_offset, 8 + index_offset, 9 + index_offset, 
-                    11 + index_offset, 8 + index_offset, 10 + index_offset, 
+                    10 + index_offset, 8 + index_offset, 9 + index_offset,
+                    11 + index_offset, 8 + index_offset, 10 + index_offset,
                 ]);
 
                 index_offset += 12;

@@ -37,6 +37,7 @@ impl TextRenderer {
         let sampler = render_context
             .device
             .create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("text sampler"),
                 mag_filter: wgpu::FilterMode::Nearest,
                 min_filter: wgpu::FilterMode::Nearest,
                 ..wgpu::SamplerDescriptor::default()
@@ -50,7 +51,7 @@ impl TextRenderer {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 comparison: false,
                                 filtering: true,
@@ -59,7 +60,7 @@ impl TextRenderer {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 view_dimension: wgpu::TextureViewDimension::D2Array,
@@ -73,7 +74,7 @@ impl TextRenderer {
         let bind_group = render_context
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some(&("Font texture bind group")),
+                label: Some("Font texture bind group"),
                 layout: &bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
@@ -162,6 +163,6 @@ impl TextRenderer {
         string: &str,
     ) -> GeometryBuffers<u16> {
         let geometry = self.string_geometry(x, y, string);
-        GeometryBuffers::from_geometry(render_context, &geometry, wgpu::BufferUsage::empty())
+        GeometryBuffers::from_geometry(render_context, &geometry, wgpu::BufferUsages::empty())
     }
 }

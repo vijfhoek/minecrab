@@ -24,10 +24,9 @@ pub struct DebugHud {
 impl DebugHud {
     pub fn new(render_context: &RenderContext) -> Self {
         let text_renderer = TextRenderer::new(render_context).unwrap();
-        let fps_geometry_buffers =
-            text_renderer.string_to_buffers(&render_context, -0.98, 0.97, "");
+        let fps_geometry_buffers = text_renderer.string_to_buffers(render_context, -0.98, 0.97, "");
         let coordinates_geometry_buffers =
-            text_renderer.string_to_buffers(&render_context, -0.98, 0.97 - text_renderer::DY, "");
+            text_renderer.string_to_buffers(render_context, -0.98, 0.97 - text_renderer::DY, "");
 
         Self {
             text_renderer,

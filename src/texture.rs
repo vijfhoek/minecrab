@@ -18,8 +18,8 @@ impl Texture {
 
     pub fn create_depth_texture(render_context: &RenderContext, label: &str) -> Self {
         let size = wgpu::Extent3d {
-            width: render_context.swap_chain_descriptor.width,
-            height: render_context.swap_chain_descriptor.height,
+            width: render_context.size.width,
+            height: render_context.size.height,
             depth_or_array_layers: 1,
         };
 
@@ -32,23 +32,26 @@ impl Texture {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: Self::DEPTH_FORMAT,
-                usage: wgpu::TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::SAMPLED,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
             });
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = render_context
             .device
             .create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("depth sampler"),
                 address_mode_u: wgpu::AddressMode::ClampToEdge,
                 address_mode_v: wgpu::AddressMode::ClampToEdge,
                 address_mode_w: wgpu::AddressMode::ClampToEdge,
                 mag_filter: wgpu::FilterMode::Linear,
                 min_filter: wgpu::FilterMode::Linear,
                 mipmap_filter: wgpu::FilterMode::Nearest,
-                compare: Some(wgpu::CompareFunction::LessEqual),
                 lod_min_clamp: -100.0,
                 lod_max_clamp: 100.0,
-                ..Default::default()
+                compare: Some(wgpu::CompareFunction::LessEqual),
+                anisotropy_clamp: None,
+                border_color: None,
             });
 
         Self {
@@ -80,9 +83,9 @@ impl Texture {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsage::SAMPLED
-                    | wgpu::TextureUsage::COPY_DST
-                    | wgpu::TextureUsage::COPY_SRC,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::COPY_SRC,
             });
 
         let stride = 4 * rgba.width();
@@ -92,6 +95,7 @@ impl Texture {
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
             &rgba.as_bytes()[offset..offset + (size.y * stride) as usize],
             wgpu::ImageDataLayout {
@@ -182,7 +186,7 @@ impl TextureManager {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 comparison: false,
                                 filtering: true,
@@ -191,7 +195,7 @@ impl TextureManager {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 view_dimension: wgpu::TextureViewDimension::D2Array,
@@ -205,6 +209,7 @@ impl TextureManager {
         let sampler = render_context
             .device
             .create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("texture manager sampler"),
                 address_mode_u: wgpu::AddressMode::Repeat,
                 address_mode_v: wgpu::AddressMode::Repeat,
                 address_mode_w: wgpu::AddressMode::Repeat,
@@ -242,7 +247,7 @@ impl TextureManager {
         let texture_array = render_context
             .device
             .create_texture(&wgpu::TextureDescriptor {
-                label: None,
+                label: Some("load_all texture array"),
                 size: wgpu::Extent3d {
                     width: 16,
                     height: 16,
@@ -252,7 +257,7 @@ impl TextureManager {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             });
 
         let mut encoder =
@@ -268,6 +273,7 @@ impl TextureManager {
                     texture: &texture.texture,
                     mip_level: 0,
                     origin: Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
                 },
                 wgpu::ImageCopyTexture {
                     texture: &texture_array,
@@ -277,13 +283,14 @@ impl TextureManager {
                         y: 0,
                         z: i as u32,
                     },
+                    aspect: wgpu::TextureAspect::All,
                 },
                 wgpu::Extent3d {
                     width: 16,
                     height: 16,
                     depth_or_array_layers: 1,
                 },
-            )
+            );
         }
 
         render_context
@@ -291,7 +298,7 @@ impl TextureManager {
             .submit(std::iter::once(encoder.finish()));
 
         let view = texture_array.create_view(&wgpu::TextureViewDescriptor {
-            label: None,
+            label: Some("load_all texture view"),
             dimension: Some(wgpu::TextureViewDimension::D2Array),
             array_layer_count: NonZeroU32::new(TEXTURE_COUNT as u32),
             ..wgpu::TextureViewDescriptor::default()
@@ -299,7 +306,7 @@ impl TextureManager {
 
         self.bind_group = Some(render_context.device.create_bind_group(
             &wgpu::BindGroupDescriptor {
-                label: Some(&("Block texture bind group")),
+                label: Some("Block texture bind group"),
                 layout: &self.bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {

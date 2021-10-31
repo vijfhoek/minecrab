@@ -5,6 +5,7 @@ pub mod npc;
 pub mod quad;
 
 use std::{
+    borrow::Cow,
     collections::VecDeque,
     time::{Duration, Instant},
 };
@@ -26,7 +27,7 @@ use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3};
 use fxhash::FxHashMap;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    BindGroup, Buffer, CommandEncoder, RenderPipeline, SwapChainTexture,
+    BindGroup, Buffer, CommandEncoder, RenderPipeline,
 };
 use cgmath::num_traits::Inv;
 
@@ -68,11 +69,9 @@ impl World {
         camera: &Camera,
     ) {
         self.time.time += dt.as_secs_f32();
-        render_context.queue.write_buffer(
-            &self.time_buffer,
-            0,
-            &bytemuck::cast_slice(&[self.time]),
-        );
+        render_context
+            .queue
+            .write_buffer(&self.time_buffer, 0, bytemuck::cast_slice(&[self.time]));
 
         self.update_highlight(render_context, camera);
 
@@ -179,7 +178,7 @@ impl World {
         &'a mut self,
         render_context: &RenderContext,
         render_encoder: &mut CommandEncoder,
-        frame: &SwapChainTexture,
+        texture_view: &wgpu::TextureView,
         view: &View,
     ) -> usize {
         // TODO Move this to update
@@ -188,7 +187,7 @@ impl World {
         let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render_pass"),
             color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: &frame.view,
+                view: texture_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -220,7 +219,7 @@ impl World {
         let mut triangle_count = 0;
         for position in visible {
             let chunk = self.chunks.get(position).unwrap();
-            triangle_count += chunk.render(&mut render_pass, &position, view);
+            triangle_count += chunk.render(&mut render_pass, position, view);
         }
         triangle_count += self.npc.render(&mut render_pass);
         triangle_count
@@ -245,7 +244,7 @@ impl World {
             .create_buffer_init(&BufferInitDescriptor {
                 label: Some("time_buffer"),
                 contents: bytemuck::cast_slice(&[time]),
-                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
         let time_bind_group_layout =
@@ -254,7 +253,7 @@ impl World {
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -293,8 +292,9 @@ impl World {
         let shader = render_context.device.create_shader_module(
             &(wgpu::ShaderModuleDescriptor {
                 label: Some("shader"),
-                flags: wgpu::ShaderFlags::all(),
-                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/world.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
+                    "../shaders/world.wgsl"
+                ))),
             }),
         );
 
@@ -313,18 +313,18 @@ impl World {
                         module: &shader,
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
-                            format: render_context.swap_chain_descriptor.format,
+                            format: render_context.format,
                             blend: Some(wgpu::BlendState {
                                 alpha: wgpu::BlendComponent::REPLACE,
                                 color: wgpu::BlendComponent::REPLACE,
                             }),
-                            write_mask: wgpu::ColorWrite::ALL,
+                            write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
                     primitive: wgpu::PrimitiveState {
                         cull_mode: Some(wgpu::Face::Back),
                         polygon_mode: wgpu::PolygonMode::Fill,
-                        ..Default::default()
+                        ..wgpu::PrimitiveState::default()
                     },
                     depth_stencil: Some(wgpu::DepthStencilState {
                         format: Texture::DEPTH_FORMAT,

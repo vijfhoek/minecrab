@@ -2,28 +2,29 @@
 name = "minecrab"
 version = "0.1.0"
 edition = "2018"
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.40"
-bytemuck = { version = "1.5.1", features = ["derive"] }
+anyhow = "1.0.44"
+bytemuck = { version = "1.7.2", features = ["derive"] }
 cgmath = "0.18.0"
-env_logger = "0.8.3"
-futures = "0.3.15"
+env_logger = "0.9.0"
+futures = "0.3.17"
 fxhash = "0.2.1"
-gltf = "0.16"
+gltf = "0.16.0"
 image = "0.23.14"
-itertools = "0.10.0"
+itertools = "0.10.1"
 log = "0.4.14"
 noise = "0.7.0"
 rayon = "1.5.1"
-rmp-serde = "0.15.4"
-serde = { version = "1.0.126", features = ["derive"] }
+rmp-serde = "0.15.5"
+serde = { version = "1.0.130", features = ["derive"] }
 serde_repr = "0.1.7"
-sled = { version = "0.34.6", features = ["compression"] }
-wgpu = "0.8.1"
-winit = { version = "0.25.0" }
+sled = { version = "0.34.7", features = ["compression"] }
+wgpu = "0.11.0"
+winit = "0.25.0"
 
 [profile.release]
 debug = true

@@ -509,22 +509,19 @@ impl World {
         let step = direction.map(|x| x.signum() as i32);
 
         // Algorithm from: http://www.cse.yorku.ca/%7Eamana/research/grid.pdf
-        fn get_t_max(mut n: f32, n_step: i32) -> f32 {
-            // Make sure we're not on a boundary. Might be a better way to do this?
-            if n.fract() < 0.0001 {
-                n += 0.0001;
-            }
-
+        fn dif_from_next(n: f32, n_step: i32) -> f32 {
             if n_step < 0 {
-                (n - 1.0).ceil() - n
+                // Difference between the next smallest integer and n
+                n.floor() - n
             } else {
+                // Difference between the next biggest integer and n
                 (n + 1.0).floor() - n
             }
         }
 
-        let mut t_max_x = get_t_max(origin.x, step.x) / direction.x;
-        let mut t_max_y = get_t_max(origin.y, step.y) / direction.y;
-        let mut t_max_z = get_t_max(origin.z, step.z) / direction.z;
+        let mut t_max_x = dif_from_next(origin.x, step.x) / direction.x;
+        let mut t_max_y = dif_from_next(origin.y, step.y) / direction.y;
+        let mut t_max_z = dif_from_next(origin.z, step.z) / direction.z;
 
         let t_delta_x = direction.x.abs().inv();
         let t_delta_y = direction.y.abs().inv();

@@ -7,6 +7,7 @@ use crate::{
     render_context::RenderContext,
     vertex::HudVertex,
     world::block::BlockType,
+    hud::{DEFAULT_UI_SCALE_X, DEFAULT_UI_SCALE_Y},
 };
 
 pub struct HotbarHud {
@@ -43,8 +44,8 @@ impl HotbarHud {
                 BufferUsage::empty(),
             ),
 
-            ui_scale_x: crate::hud::UI_SCALE_X,
-            ui_scale_y: crate::hud::UI_SCALE_Y,
+            ui_scale_x: DEFAULT_UI_SCALE_X,
+            ui_scale_y: DEFAULT_UI_SCALE_Y,
         }
     }
 

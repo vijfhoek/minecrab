@@ -7,6 +7,7 @@ use crate::{
     render_context::RenderContext,
     texture::Texture,
     vertex::{HudVertex, Vertex},
+    hud::{DEFAULT_UI_SCALE_X, DEFAULT_UI_SCALE_Y},
 };
 
 pub struct WidgetsHud {
@@ -27,8 +28,8 @@ impl WidgetsHud {
             texture_bind_group,
             geometry_buffers,
             hotbar_cursor_position: 0,
-            ui_scale_x: 0.0,
-            ui_scale_y: 0.0,
+            ui_scale_x: DEFAULT_UI_SCALE_X,
+            ui_scale_y: DEFAULT_UI_SCALE_Y,
         }
     }
 

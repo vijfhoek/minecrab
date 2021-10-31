@@ -7,7 +7,6 @@ use crate::{
     texture::Texture, vertex::HudVertex,
 };
 
-pub const DX: f32 = 20.0 / 640.0;
 pub const DY: f32 = 20.0 / 360.0;
 
 #[rustfmt::skip]

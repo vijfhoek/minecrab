@@ -13,9 +13,8 @@ pub mod debug_hud;
 pub mod hotbar_hud;
 pub mod widgets_hud;
 
-// TODO update aspect ratio when resizing
-pub const UI_SCALE_X: f32 = 0.0045;
-pub const UI_SCALE_Y: f32 = 0.008;
+pub const DEFAULT_UI_SCALE_X: f32 = 0.0045;
+pub const DEFAULT_UI_SCALE_Y: f32 = 0.008;
 
 pub struct Hud {
     pub widgets_hud: WidgetsHud,
@@ -166,7 +165,7 @@ impl Hud {
             ui_scale_y = ui_scale_x * ratio;
         }
 
-        self.debug_hud.set_ratio(ratio);
+        self.debug_hud.aspect_ratio;
         self.hotbar_hud.set_scale(ui_scale_x, ui_scale_y);
         self.widgets_hud.set_scale(render_context, ui_scale_x, ui_scale_y);
     }

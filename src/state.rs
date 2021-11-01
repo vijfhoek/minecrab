@@ -129,13 +129,8 @@ impl State {
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         println!("resizing to {:?}", size);
         self.window_size = size;
-        self.render_context.size = size;
-        self.surface_config.width = size.width;
-        self.surface_config.height = size.height;
-        self.render_context
-            .surface
-            .configure(&self.render_context.device, &self.surface_config);
 
+        self.hud.resize(&self.render_context, size);
         self.player.view.projection.resize(size.width, size.height);
         self.world.depth_texture =
             Texture::create_depth_texture(&self.render_context, "depth_texture");

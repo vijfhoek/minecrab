@@ -19,14 +19,23 @@ pub struct DebugHud {
 
     coordinates_last: Point3<f32>,
     coordinates_geometry_buffers: GeometryBuffers<u16>,
+
+    pub aspect_ratio: f32,
 }
 
 impl DebugHud {
     pub fn new(render_context: &RenderContext) -> Self {
+        let aspect_ratio = 16.0 / 9.0;
         let text_renderer = TextRenderer::new(render_context).unwrap();
-        let fps_geometry_buffers = text_renderer.string_to_buffers(render_context, -0.98, 0.97, "");
-        let coordinates_geometry_buffers =
-            text_renderer.string_to_buffers(render_context, -0.98, 0.97 - text_renderer::DY, "");
+        let fps_geometry_buffers =
+            text_renderer.string_to_buffers(&render_context, -0.98, 0.97, aspect_ratio, "");
+        let coordinates_geometry_buffers = text_renderer.string_to_buffers(
+            &render_context,
+            -0.98,
+            0.97 - text_renderer::DY,
+            aspect_ratio,
+            "",
+        );
 
         Self {
             text_renderer,
@@ -38,6 +47,8 @@ impl DebugHud {
 
             coordinates_last: Point3::new(0.0, 0.0, 0.0),
             coordinates_geometry_buffers,
+
+            aspect_ratio,
         }
     }
 
@@ -52,9 +63,13 @@ impl DebugHud {
             let fps = 1.0 / frametime.as_secs_f32();
 
             let string = format!("{:<5.0} fps", fps);
-            self.fps_geometry_buffers =
-                self.text_renderer
-                    .string_to_buffers(render_context, -0.98, 0.97, &string);
+            self.fps_geometry_buffers = self.text_renderer.string_to_buffers(
+                render_context,
+                -0.98,
+                0.97,
+                self.aspect_ratio,
+                &string,
+            );
 
             self.fps_elapsed = Duration::from_secs(0);
             self.fps_frames = 0;
@@ -66,6 +81,7 @@ impl DebugHud {
                 render_context,
                 -0.98,
                 0.97 - text_renderer::DY * 1.3,
+                self.aspect_ratio,
                 &string,
             );
         }

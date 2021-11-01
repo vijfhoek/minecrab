@@ -23,13 +23,13 @@ use crate::{
         npc::Npc,
     },
 };
+use cgmath::num_traits::Inv;
 use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3};
 use fxhash::FxHashMap;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BindGroup, Buffer, CommandEncoder, RenderPipeline,
 };
-use cgmath::num_traits::Inv;
 
 pub struct World {
     pub render_pipeline: RenderPipeline,

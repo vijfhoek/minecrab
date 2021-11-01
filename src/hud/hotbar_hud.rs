@@ -4,7 +4,7 @@ use wgpu::{BufferUsages, RenderPass};
 use crate::{
     geometry::Geometry,
     geometry_buffers::GeometryBuffers,
-    hud::{UI_SCALE_X, UI_SCALE_Y},
+    hud::{DEFAULT_UI_SCALE_X, DEFAULT_UI_SCALE_Y},
     render_context::RenderContext,
     vertex::HudVertex,
     world::block::BlockType,
@@ -15,6 +15,9 @@ pub struct HotbarHud {
     pub last_blocks: [Option<BlockType>; 9],
 
     pub geometry_buffers: GeometryBuffers<u16>,
+
+    ui_scale_x: f32,
+    ui_scale_y: f32,
 }
 
 impl HotbarHud {
@@ -40,6 +43,9 @@ impl HotbarHud {
                 &Geometry::<HudVertex, _>::default(),
                 BufferUsages::empty(),
             ),
+
+            ui_scale_x: DEFAULT_UI_SCALE_X,
+            ui_scale_y: DEFAULT_UI_SCALE_Y,
         }
     }
 
@@ -87,75 +93,75 @@ impl HotbarHud {
                 vertices.extend([
                     // Left face
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 3.5],
+                        position: [self.ui_scale_x * (x + 12.0), -1.0 + self.ui_scale_y * 3.5],
                         texture_coordinates: [1.0, 1.0],
                         texture_index: texture_indices.0 as i32,
                         color: color_left,
                     },
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 5.0), -1.0 + UI_SCALE_Y * 6.5],
+                        position: [self.ui_scale_x * (x + 5.0), -1.0 + self.ui_scale_y * 6.5],
                         texture_coordinates: [0.0, 1.0],
                         texture_index: texture_indices.0 as i32,
                         color: color_left,
                     },
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 5.0), -1.0 + UI_SCALE_Y * 15.5],
+                        position: [self.ui_scale_x * (x + 5.0), -1.0 + self.ui_scale_y * 15.5],
                         texture_coordinates: [0.0, 0.0],
                         texture_index: texture_indices.0 as i32,
                         color: color_left,
                     },
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 12.5],
+                        position: [self.ui_scale_x * (x + 12.0), -1.0 + self.ui_scale_y * 12.5],
                         texture_coordinates: [1.0, 0.0],
                         texture_index: texture_indices.0 as i32,
                         color: color_left,
                     },
                     // Front face
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 15.5],
+                        position: [self.ui_scale_x * (x + 19.0), -1.0 + self.ui_scale_y * 15.5],
                         texture_coordinates: [1.0, 0.0],
                         texture_index: texture_indices.3 as i32,
                         color: color_front,
                     },
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 12.5],
+                        position: [self.ui_scale_x * (x + 12.0), -1.0 + self.ui_scale_y * 12.5],
                         texture_coordinates: [0.0, 0.0],
                         texture_index: texture_indices.3 as i32,
                         color: color_front,
                     },
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 3.5],
+                        position: [self.ui_scale_x * (x + 12.0), -1.0 + self.ui_scale_y * 3.5],
                         texture_coordinates: [0.0, 1.0],
                         texture_index: texture_indices.3 as i32,
                         color: color_front,
                     },
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 6.5],
+                        position: [self.ui_scale_x * (x + 19.0), -1.0 + self.ui_scale_y * 6.5],
                         texture_coordinates: [1.0, 1.0],
                         texture_index: texture_indices.3 as i32,
                         color: color_front,
                     },
                     // Top face
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 19.0), -1.0 + UI_SCALE_Y * 15.5],
+                        position: [self.ui_scale_x * (x + 19.0), -1.0 + self.ui_scale_y * 15.5],
                         texture_coordinates: [1.0, 0.0],
                         texture_index: texture_indices.5 as i32,
                         color: color_top,
                     },
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 18.5],
+                        position: [self.ui_scale_x * (x + 12.0), -1.0 + self.ui_scale_y * 18.5],
                         texture_coordinates: [0.0, 0.0],
                         texture_index: texture_indices.5 as i32,
                         color: color_top,
                     },
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 5.0), -1.0 + UI_SCALE_Y * 15.5],
+                        position: [self.ui_scale_x * (x + 5.0), -1.0 + self.ui_scale_y * 15.5],
                         texture_coordinates: [0.0, 1.0],
                         texture_index: texture_indices.5 as i32,
                         color: color_top,
                     },
                     HudVertex {
-                        position: [UI_SCALE_X * (x + 12.0), -1.0 + UI_SCALE_Y * 12.5],
+                        position: [self.ui_scale_x * (x + 12.0), -1.0 + self.ui_scale_y * 12.5],
                         texture_coordinates: [1.0, 1.0],
                         texture_index: texture_indices.5 as i32,
                         color: color_top,
@@ -182,5 +188,10 @@ impl HotbarHud {
         }
 
         Geometry::new(vertices, indices)
+    }
+
+    pub fn set_scale(&mut self, scale_x: f32, scale_y: f32) {
+        self.ui_scale_x = scale_x;
+        self.ui_scale_y = scale_y;
     }
 }

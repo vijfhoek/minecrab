@@ -4,10 +4,10 @@ use wgpu::{BufferUsages, RenderPass};
 use crate::{
     geometry::Geometry,
     geometry_buffers::GeometryBuffers,
+    hud::{DEFAULT_UI_SCALE_X, DEFAULT_UI_SCALE_Y},
     render_context::RenderContext,
     vertex::HudVertex,
     world::block::BlockType,
-    hud::{DEFAULT_UI_SCALE_X, DEFAULT_UI_SCALE_Y},
 };
 
 pub struct HotbarHud {

@@ -161,7 +161,7 @@ impl Hud {
 
         self.debug_hud.aspect_ratio;
         self.hotbar_hud.set_scale(ui_scale_x, ui_scale_y);
-        self.widgets_hud.set_scale(render_context, ui_scale_x, ui_scale_y);
+        self.widgets_hud
+            .set_scale(render_context, ui_scale_x, ui_scale_y);
     }
-
 }

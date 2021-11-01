@@ -4,10 +4,10 @@ use wgpu::{BindGroup, BufferUsages, RenderPass};
 use crate::{
     geometry::Geometry,
     geometry_buffers::GeometryBuffers,
+    hud::{DEFAULT_UI_SCALE_X, DEFAULT_UI_SCALE_Y},
     render_context::RenderContext,
     texture::Texture,
     vertex::{HudVertex, Vertex},
-    hud::{DEFAULT_UI_SCALE_X, DEFAULT_UI_SCALE_Y},
 };
 
 pub struct WidgetsHud {
@@ -141,7 +141,11 @@ impl WidgetsHud {
         self.geometry_buffers = Self::generate_geometry_buffer(render_context, scale_x, scale_y);
     }
 
-    fn generate_geometry_buffer(render_context: &RenderContext, ui_scale_x: f32, ui_scale_y: f32) -> GeometryBuffers<u16> {
+    fn generate_geometry_buffer(
+        render_context: &RenderContext,
+        ui_scale_x: f32,
+        ui_scale_y: f32,
+    ) -> GeometryBuffers<u16> {
         #[rustfmt::skip]
         let vertices: [HudVertex; 12] = [
             // Crosshair
@@ -171,7 +175,6 @@ impl WidgetsHud {
         GeometryBuffers::from_geometry(render_context, &geometry, BufferUsages::COPY_DST)
     }
 }
-
 
 #[rustfmt::skip]
 pub const INDICES: [u16; 18] = [
